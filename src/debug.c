@@ -706,7 +706,7 @@ void laik_log_Action(Laik_Action* a, Laik_ActionSeq* as)
 
     default:
         if (as->backend && as->backend->log_action)
-            if ((*as->backend->log_action)(a)) return;
+            if ((*as->backend->log_action)(as->backend, a)) return;
 
         laik_log(LAIK_LL_Panic,
                  "laik_log_Action: unknown action %d", a->type);

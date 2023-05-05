@@ -88,7 +88,7 @@ void laik_aseq_free(Laik_ActionSeq* as)
 
     if (as->backend) {
         // ask backend to do its own cleanup for this action sequence
-        (as->backend->cleanup)(as);
+        (as->backend->cleanup)(as->backend, as);
     }
 
     Laik_TransitionContext* tc = as->context[0];

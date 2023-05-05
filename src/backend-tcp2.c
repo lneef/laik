@@ -185,11 +185,11 @@
 #define RBUF_LEN 8*1024
 
 // forward decl
-void tcp2_exec(Laik_ActionSeq* as);
-void tcp2_sync(Laik_KVStore* kvs);
-Laik_Group* tcp2_resize(Laik_ResizeRequests*);
-void tcp2_finish_resize();
-void tcp2_make_progress();
+void tcp2_exec(const Laik_Backend* this, Laik_ActionSeq* as);
+void tcp2_sync(const Laik_Backend* this, Laik_KVStore* kvs);
+Laik_Group* tcp2_resize(const Laik_Backend* this, Laik_ResizeRequests*);
+void tcp2_finish_resize(const Laik_Backend* this);
+void tcp2_make_progress(const Laik_Backend* this);
 
 typedef struct _InstData InstData;
 
@@ -2307,8 +2307,9 @@ void exec_reduce(Laik_TransitionContext* tc,
 }
 
 
-void tcp2_exec(Laik_ActionSeq* as)
+void tcp2_exec(const Laik_Backend* this, Laik_ActionSeq* as)
 {
+    (void)this;
     if (as->actionCount == 0) {
         laik_log(1, "TCP2 exec: nothing to do\n");
         return;
@@ -2369,8 +2370,9 @@ void tcp2_exec(Laik_ActionSeq* as)
     }
 }
 
-void tcp2_sync(Laik_KVStore* kvs)
+void tcp2_sync(const Laik_Backend* this, Laik_KVStore* kvs)
 {
+    (void)this;
     char msg[100];
     InstData* d = (InstData*)instance->backend_data;
 
@@ -2454,7 +2456,7 @@ void tcp2_sync(Laik_KVStore* kvs)
     d->kvs = 0;
 }
 
-void tcp2_make_progress()
+void tcp2_make_progress(const Laik_Backend* this)
 {
     // process incoming commands
     InstData* d = (InstData*)instance->backend_data;
@@ -2482,8 +2484,9 @@ void tcp2_make_progress()
     }
 }
 
-void tcp2_finish_resize()
+void tcp2_finish_resize(const Laik_Backend* this)
 {
+    (void)this;
     // a resize must have been started
     assert(instance->world && instance->world->parent);
 
@@ -2503,8 +2506,9 @@ void tcp2_finish_resize()
 
 
 // return new group on process size change (global sync)
-Laik_Group* tcp2_resize(Laik_ResizeRequests* resizeReqs)
+Laik_Group* tcp2_resize(const Laik_Backend* this, Laik_ResizeRequests* resizeReqs)
 {
+    (void)this;
     char msg[150];
 
     // any previous resize must be finished

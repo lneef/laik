@@ -48,12 +48,12 @@
 
 // forward decls, types/structs , global variables
 
-static void laik_tcp_finalize(Laik_Instance*);
-static void laik_tcp_prepare(Laik_ActionSeq*);
-static void laik_tcp_cleanup(Laik_ActionSeq*);
-static void laik_tcp_exec(Laik_ActionSeq* as);
-static void laik_tcp_updateGroup(Laik_Group*);
-static void laik_tcp_sync(Laik_KVStore* kvs);
+static void laik_tcp_finalize(const Laik_Backend* this, Laik_Instance*);
+static void laik_tcp_prepare(const Laik_Backend* this, Laik_ActionSeq*);
+static void laik_tcp_cleanup(const Laik_Backend* this, Laik_ActionSeq*);
+static void laik_tcp_exec(const Laik_Backend* this, Laik_ActionSeq* as);
+static void laik_tcp_updateGroup(const Laik_Backend* this, Laik_Group*);
+static void laik_tcp_sync(const Laik_Backend* this, Laik_KVStore* kvs);
 
 // C guarantees that unset function pointers are NULL
 static Laik_Backend laik_backend_tcp = {
@@ -207,8 +207,9 @@ TCPGroupData* tcpGroupData(Laik_Group* g)
 }
 
 static
-void laik_tcp_finalize(Laik_Instance* inst)
+void laik_tcp_finalize(const Laik_Backend* this, Laik_Instance* inst)
 {
+    (void)this;
     assert(inst == tcp_instance);
 
     if (tcpData(tcp_instance)->didInit) {
@@ -220,8 +221,9 @@ void laik_tcp_finalize(Laik_Instance* inst)
 
 // update backend specific data for group if needed
 static
-void laik_tcp_updateGroup(Laik_Group* g)
+void laik_tcp_updateGroup(const Laik_Backend* this, Laik_Group* g)
 {
+    (void)this;
     // calculate MPI communicator for group <g>
     // TODO: only supports shrinking of parent for now
     assert(g->parent);
@@ -497,8 +499,9 @@ void laik_mpi_exec_groupReduce(Laik_TransitionContext* tc,
 }
 
 static
-void laik_tcp_exec(Laik_ActionSeq* as)
+void laik_tcp_exec(const Laik_Backend* this, Laik_ActionSeq* as)
 {
+    (void)this;
     if (as->actionCount == 0) {
         laik_log(1, "TCP backend exec: nothing to do\n");
         return;
@@ -736,8 +739,9 @@ void laik_tcp_exec(Laik_ActionSeq* as)
 
 
 static
-void laik_tcp_prepare(Laik_ActionSeq* as)
+void laik_tcp_prepare(const Laik_Backend* this, Laik_ActionSeq* as)
 {
+    (void)this;
     if (laik_log_begin(1)) {
         laik_log_append("TCP backend prepare:\n");
         laik_log_ActionSeq(as, false);
@@ -793,8 +797,9 @@ void laik_tcp_prepare(Laik_ActionSeq* as)
     laik_aseq_calc_stats(as);
 }
 
-static void laik_tcp_cleanup(Laik_ActionSeq* as)
+static void laik_tcp_cleanup(const Laik_Backend* this, Laik_ActionSeq* as)
 {
+    (void)this;
     if (laik_log_begin(1)) {
         laik_log_append("TCP backend cleanup:\n");
         laik_log_ActionSeq(as, false);
@@ -808,8 +813,9 @@ static void laik_tcp_cleanup(Laik_ActionSeq* as)
 // KV store
 
 
-static void laik_tcp_sync(Laik_KVStore* kvs)
+static void laik_tcp_sync(const Laik_Backend* this, Laik_KVStore* kvs)
 {
+    (void)this;
     assert(kvs->inst == tcp_instance);
     MPI_Comm comm = tcpData(tcp_instance)->comm;
     Laik_Group* world = kvs->inst->world;

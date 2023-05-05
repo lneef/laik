@@ -33,7 +33,7 @@
 // about available backends, and it calls specific init functions directly
 struct _Laik_Backend {
   char* name;
-  void (*finalize)(Laik_Instance*);
+  void (*finalize)(const Laik_Backend*, Laik_Instance*);
 
   // Record the actions required to do a transition on data, eventually
   // using provided mappings (can be 0 if mappings are not allocated yet).
@@ -50,25 +50,25 @@ struct _Laik_Backend {
   //   plans for one data container.
   // - prepare an optimized communcation schedule using the pre-allocated
   //   resources
-  void (*prepare)(Laik_ActionSeq*);
+  void (*prepare)(const Laik_Backend*, Laik_ActionSeq*);
 
   // free resources allocated for an action sequence
-  void (*cleanup)(Laik_ActionSeq*);
+  void (*cleanup)(const Laik_Backend*, Laik_ActionSeq*);
 
   // execute a action sequence
-  void (*exec)(Laik_ActionSeq*);
+  void (*exec)(const Laik_Backend*, Laik_ActionSeq*);
 
   // update backend specific data for group if needed
-  void (*updateGroup)(Laik_Group*);
+  void (*updateGroup)(const Laik_Backend*, Laik_Group*);
 
   // sync of key-value store
-  void (*sync)(Laik_KVStore* kvs);
+  void (*sync)(const Laik_Backend*, Laik_KVStore* kvs);
 
   // log backend-specific action, return true if handled (see laik_log_Action)
-  bool (*log_action)(Laik_Action* a);
+  bool (*log_action)(const Laik_Backend*, Laik_Action* a);
 
   // ensure progress in backend, can be NULL
-  void (*make_progress)();
+  void (*make_progress)(const Laik_Backend*);
 
   // function for elasticity support, to be called by all active
   // processes, resulting in a global synchronization.
@@ -80,11 +80,11 @@ struct _Laik_Backend {
   // TODO:
   // - also handle remove requests via function parameter
   // - sub-world elasticity
-  Laik_Group* (*resize)(Laik_ResizeRequests*);
+  Laik_Group* (*resize)(const Laik_Backend*, Laik_ResizeRequests*);
 
   // for elasticity: removal of processes which got started in a previous
   // resize is finished. They can be marked as dead and resources freed
-  void (*finish_resize)();
+  void (*finish_resize)(const Laik_Backend*);
 };
 
 
