@@ -32,18 +32,18 @@
 #include <unistd.h>
 #include <string.h>
 
-#include <shmem.h>
+#include <backends/shmem/shmem.h>
 #include <laik-backend-shmem.h>
 
 // forward decls, types/structs , global variables
+static void laik_mpi_finalize(const Laik_Backend* this, Laik_Instance*);
+static void laik_mpi_prepare(const Laik_Backend* this, Laik_ActionSeq*);
+static void laik_mpi_cleanup(const Laik_Backend* this, Laik_ActionSeq*);
+static void laik_mpi_exec(const Laik_Backend* this, Laik_ActionSeq* as);
+static void laik_mpi_updateGroup(const Laik_Backend* this, Laik_Group*);
+static bool laik_mpi_log_action(const Laik_Backend* this, Laik_Action* a);
+static void laik_mpi_sync(const Laik_Backend* this, Laik_KVStore* kvs);
 
-static void laik_mpi_finalize(Laik_Instance *);
-static void laik_mpi_prepare(Laik_ActionSeq *);
-static void laik_mpi_cleanup(Laik_ActionSeq *);
-static void laik_mpi_exec(Laik_ActionSeq *as);
-static void laik_mpi_updateGroup(Laik_Group *);
-static bool laik_mpi_log_action(Laik_Action *a);
-static void laik_mpi_sync(Laik_KVStore *kvs);
 
 // C guarantees that unset function pointers are NULL
 static Laik_Backend laik_backend_mpi = {
@@ -177,13 +177,13 @@ static void laik_mpi_addMpiWait(Laik_ActionSeq *as, int round, int req_id)
     a->req_id = req_id;
 }
 
-static bool laik_mpi_log_action(Laik_Action *a)
+static
+bool laik_mpi_log_action(const Laik_Backend* this, Laik_Action* a)
 {
-    switch (a->type)
-    {
-    case LAIK_AT_MpiReq:
-    {
-        Laik_A_MpiReq *aa = (Laik_A_MpiReq *)a;
+    (void)this;
+    switch(a->type) {
+    case LAIK_AT_MpiReq: {
+        Laik_A_MpiReq* aa = (Laik_A_MpiReq*) a;
         laik_log_append("MPI-Req: count %d, req %p", aa->count, aa->req);
         break;
     }
@@ -429,8 +429,10 @@ static MPIGroupData *mpiGroupData(Laik_Group *g)
     return (MPIGroupData *)g->backend_data;
 }
 
-static void laik_mpi_finalize(Laik_Instance *inst)
+static
+void laik_mpi_finalize(const Laik_Backend* this, Laik_Instance* inst)
 {
+    (void) this;
     assert(inst == mpi_instance);
 
     if (mpiData(mpi_instance)->didInit)
@@ -446,8 +448,10 @@ static void laik_mpi_finalize(Laik_Instance *inst)
 }
 
 // update backend specific data for group if needed
-static void laik_mpi_updateGroup(Laik_Group *g)
+static
+void laik_mpi_updateGroup(const Laik_Backend* this, Laik_Group* g)
 {
+    (void)this;
     // calculate MPI communicator for group <g>
     // TODO: only supports shrinking of parent for now
     assert(g->parent);
@@ -772,10 +776,11 @@ static void laik_mpi_exec_groupReduce(Laik_TransitionContext *tc,
     }
 }
 
-static void laik_mpi_exec(Laik_ActionSeq *as)
+static
+void laik_mpi_exec(const Laik_Backend* this, Laik_ActionSeq* as)
 {
-    if (as->actionCount == 0)
-    {
+    (void)this;
+    if (as->actionCount == 0) {
         laik_log(1, "MPI backend exec: nothing to do\n");
         return;
     }
@@ -1119,10 +1124,12 @@ static void laik_mpi_aseq_calc_stats(Laik_ActionSeq *as)
     }
 }
 
-static void laik_mpi_prepare(Laik_ActionSeq *as)
+
+static
+void laik_mpi_prepare(const Laik_Backend* this, Laik_ActionSeq* as)
 {
-    if (laik_log_begin(1))
-    {
+    (void)this;
+    if (laik_log_begin(1)) {
         laik_log_append("MPI backend prepare:\n");
         laik_log_ActionSeq(as, false);
         laik_log_flush(0);
@@ -1192,10 +1199,10 @@ static void laik_mpi_prepare(Laik_ActionSeq *as)
     laik_mpi_aseq_calc_stats(as);
 }
 
-static void laik_mpi_cleanup(Laik_ActionSeq *as)
+static void laik_mpi_cleanup(const Laik_Backend* this, Laik_ActionSeq* as)
 {
-    if (laik_log_begin(1))
-    {
+    (void)this;
+    if (laik_log_begin(1)) {
         laik_log_append("MPI backend cleanup:\n");
         laik_log_ActionSeq(as, false);
         laik_log_flush(0);
@@ -1214,8 +1221,10 @@ static void laik_mpi_cleanup(Laik_ActionSeq *as)
 //----------------------------------------------------------------------------
 // KV store
 
-static void laik_mpi_sync(Laik_KVStore *kvs)
+
+static void laik_mpi_sync(const Laik_Backend* this, Laik_KVStore* kvs)
 {
+    (void)this;
     assert(kvs->inst == mpi_instance);
     MPI_Comm comm = mpiData(mpi_instance)->comm;
     Laik_Group *world = kvs->inst->world;

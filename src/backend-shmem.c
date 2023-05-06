@@ -19,11 +19,11 @@
 
 #include "laik-internal.h"
 #include "laik-backend-shmem.h"
+#include "backends/shmem/shmem.h"
 
 #include <assert.h>
 #include <stdlib.h>
 #include <mpi.h>
-#include <shmem.h>
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -34,12 +34,12 @@
 
 // forward decls, types/structs , global variables
 
-static void laik_shmem_finalize(Laik_Instance *);
-static void laik_shmem_prepare(Laik_ActionSeq *);
-static void laik_shmem_cleanup(Laik_ActionSeq *);
-static void laik_shmem_exec(Laik_ActionSeq *as);
-static void laik_shmem_updateGroup(Laik_Group *);
-static void laik_shmem_sync(Laik_KVStore *kvs);
+static void laik_shmem_finalize(const Laik_Backend*, Laik_Instance *);
+static void laik_shmem_prepare(const Laik_Backend*, Laik_ActionSeq *);
+static void laik_shmem_cleanup(const Laik_Backend*, Laik_ActionSeq *);
+static void laik_shmem_exec(const Laik_Backend*, Laik_ActionSeq *as);
+static void laik_shmem_updateGroup(const Laik_Backend*, Laik_Group *);
+static void laik_shmem_sync(const Laik_Backend* ,Laik_KVStore *kvs);
 
 // C guarantees that unset function pointers are NULL
 static Laik_Backend laik_backend_shmem = {
@@ -177,8 +177,9 @@ static SHMEMData *shmemData(Laik_Instance *i)
     return (SHMEMData *)i->backend_data;
 }
 
-static void laik_shmem_finalize(Laik_Instance *inst)
+static void laik_shmem_finalize(const Laik_Backend* this, Laik_Instance *inst)
 {
+    (void) this;
     assert(inst == shmem_instance);
 
     if (shmemData(shmem_instance)->didInit)
@@ -190,8 +191,9 @@ static void laik_shmem_finalize(Laik_Instance *inst)
 }
 
 // update backend specific data for group if needed
-static void laik_shmem_updateGroup(Laik_Group *g)
+static void laik_shmem_updateGroup(const Laik_Backend* this, Laik_Group *g)
 {
+    (void) this;
     (void) g;
     return;
 }
@@ -386,8 +388,9 @@ static void laik_shmem_exec_groupReduce(Laik_TransitionContext *tc, Laik_Backend
     }
 }
 
-static void laik_shmem_exec(Laik_ActionSeq *as)
+static void laik_shmem_exec(const Laik_Backend* this, Laik_ActionSeq *as)
 {
+    (void) this;
     if (as->actionCount == 0)
     {
         laik_log(1, "SHMEM backend exec: nothing to do\n");
@@ -608,8 +611,9 @@ static void laik_shmem_exec(Laik_ActionSeq *as)
     assert(((char *)as->action) + as->bytesUsed == ((char *)a));
 }
 
-static void laik_shmem_prepare(Laik_ActionSeq *as)
+static void laik_shmem_prepare(const Laik_Backend* this, Laik_ActionSeq *as)
 {
+    (void) this;
     if (laik_log_begin(1))
     {
         laik_log_append("SHMEM backend prepare:\n");
@@ -661,8 +665,9 @@ static void laik_shmem_prepare(Laik_ActionSeq *as)
     laik_aseq_calc_stats(as);
 }
 
-static void laik_shmem_cleanup(Laik_ActionSeq *as)
+static void laik_shmem_cleanup(const Laik_Backend* this, Laik_ActionSeq *as)
 {
+    (void) this;
     if (laik_log_begin(1))
     {
         laik_log_append("SHMEM backend cleanup:\n");
@@ -676,8 +681,9 @@ static void laik_shmem_cleanup(Laik_ActionSeq *as)
 //----------------------------------------------------------------------------
 // KV store
 
-static void laik_shmem_sync(Laik_KVStore *kvs)
+static void laik_shmem_sync(const Laik_Backend* this, Laik_KVStore *kvs)
 {
+    (void) this;
     assert(kvs->inst == shmem_instance);
     Laik_Group *world = kvs->inst->world;
     int myid = world->myid;

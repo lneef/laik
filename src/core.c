@@ -163,7 +163,7 @@ void laik_finalize(Laik_Instance* inst)
     laik_finish_world_resize(inst);
 
     if (inst->backend && inst->backend->finalize)
-        (*inst->backend->finalize)(inst);
+        (*inst->backend->finalize)(inst->backend, inst);
 
     if (inst->repart_ctrl){
         laik_ext_cleanup(inst);
@@ -521,7 +521,7 @@ Laik_Group* laik_new_shrinked_group(Laik_Group* g, int len, int* list)
     g2->myid = (g->myid < 0) ? -1 : g2->fromParent[g->myid];
 
     if (g->inst->backend->updateGroup)
-        (g->inst->backend->updateGroup)(g2);
+        (g->inst->backend->updateGroup)(g->inst->backend, g2);
 
     if (laik_log_begin(1)) {
         laik_log_append("shrink group: "
@@ -555,7 +555,7 @@ Laik_Group* laik_allow_world_resize(Laik_Instance* instance, int phase)
     // phase, so ask backend to progress (if it provides such a function).
     // this may result in queuing incoming join/remove requests
     if (instance->backend->make_progress) {
-        (instance->backend->make_progress)();
+        (instance->backend->make_progress)(instance->backend);
     }
 
     // for now, we handle all resize requests directly
@@ -575,7 +575,7 @@ Laik_Group* laik_allow_world_resize(Laik_Instance* instance, int phase)
                        jcount, rcount);
     }
 
-    Laik_Group* g = (instance->backend->resize)(reqs);
+    Laik_Group* g = (instance->backend->resize)(instance->backend, reqs);
     if (reqs)
         reqs->used = 0;
 
@@ -593,7 +593,7 @@ void laik_finish_world_resize(Laik_Instance* instance)
     if (parent == 0) return;
 
     if (instance->backend->finish_resize) {
-        (instance->backend->finish_resize)();
+        (instance->backend->finish_resize)(instance->backend);
     }
 
     laik_release_group(parent);

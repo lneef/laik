@@ -25,7 +25,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include <shmem.h>
+#include "backends/shmem/shmem.h"
 
 
 // provided allocators
@@ -827,7 +827,7 @@ void doTransition(Laik_Data* d, Laik_Transition* t, Laik_ActionSeq* as,
 #if 1
         const Laik_Backend* backend = d->space->inst->backend;
         if (backend->prepare)
-            (backend->prepare)(as);
+            (backend->prepare)(backend, as);
         else {
             // for statistics: usually called in backend prepare function
             laik_aseq_calc_stats(as);
@@ -843,7 +843,7 @@ void doTransition(Laik_Data* d, Laik_Transition* t, Laik_ActionSeq* as,
         if (inst->profiling->do_profiling)
             inst->profiling->timer_backend = laik_wtime();
 
-        (inst->backend->exec)(as);
+        (inst->backend->exec)(inst->backend, as);
 
         if (inst->profiling->do_profiling)
             inst->profiling->time_backend += laik_wtime() - inst->profiling->timer_backend;
@@ -1228,7 +1228,7 @@ Laik_ActionSeq* laik_calc_actions(Laik_Data* d,
     Laik_ActionSeq* as = createTransASeq(d, t, fromList, toList);
     const Laik_Backend* backend = d->space->inst->backend;
     if (backend->prepare) {
-        (backend->prepare)(as);
+        (backend->prepare)(backend, as);
 
         // remember mappings at prepare time
         Laik_TransitionContext* tc = as->context[0];

@@ -14,6 +14,7 @@ LDLIBS=-ldl
 SRCS = $(wildcard $(SDIR)src/*.c)
 ifdef USE_TCP
 SRCS += $(wildcard $(SDIR)src/backends/tcp/*.c)
+SRCS += $(wildcard $(SDIR)src/backends/shmem/*.c)
 IFLAGS += $(TCP_INC)
 LDLIBS += $(TCP_LIBS)
 endif
