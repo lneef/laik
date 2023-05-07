@@ -1,7 +1,7 @@
 
 
-#ifndef NUMA_NODE_H
-#define NUMA_NODE_H
+#ifndef NODE_H
+#define NODE_H
 #include <stdint.h>
 
 struct proc_info{

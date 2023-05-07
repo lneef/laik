@@ -1,5 +1,5 @@
 #define _GNU_SOURCE 
-#include "numa-node.h"
+#include "node.h"
 #include <unistd.h>
 #include <sched.h>
 

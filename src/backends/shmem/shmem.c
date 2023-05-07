@@ -16,7 +16,6 @@
  */
 
 #include "shmem.h"
-#include "numa-node.h"
 
 #include <assert.h>
 #include <stdlib.h>
