@@ -15,7 +15,6 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-#define USE_MPI 1
 #ifdef USE_MPI
 
 #include "laik-internal.h"
@@ -1156,8 +1155,6 @@ void laik_mpi_prepare(const Laik_Backend* this, Laik_ActionSeq* as)
         changed = laik_aseq_replaceWithAllReduce(as);
         laik_log_ActionSeqIfChanged(changed, as, "After all-reduce detection");
     }
-    changed = laik_aseq_replaceWithShmemCalls(as);
-    laik_log_ActionSeqIfChanged(changed, as, "After replacing with shmem calls");
 
     changed = laik_aseq_combineActions(as);
     laik_log_ActionSeqIfChanged(changed, as, "After combining actions 1");
@@ -1183,6 +1180,9 @@ void laik_mpi_prepare(const Laik_Backend* this, Laik_ActionSeq* as)
     changed = laik_aseq_sort_2phases(as);
     // changed = laik_aseq_sort_rankdigits(as);
     laik_log_ActionSeqIfChanged(changed, as, "After sorting for deadlock avoidance");
+
+    changed = laik_aseq_replaceWithShmemCalls(as);
+    laik_log_ActionSeqIfChanged(changed, as, "After replacing with shmem calls");
 
     if (mpi_async)
     {
