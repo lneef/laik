@@ -85,7 +85,18 @@ struct _Laik_Backend {
   // for elasticity: removal of processes which got started in a previous
   // resize is finished. They can be marked as dead and resources freed
   void (*finish_resize)(const Laik_Backend*);
+
+  Laik_Secondary** chain;
 };
+
+struct _Laik_Secondary {
+  unsigned chain_index;
+  void (*laik_secondary_finalize)();
+  bool (*laik_replace_secondary)(const Laik_Backend*, Laik_ActionSeq *);
+  bool (*laik_secondary_exec)(const Laik_Backend*, Laik_ActionSeq *, Laik_Action *);
+  bool (*laik_secondary_log_action)(Laik_Action *);
+};
+
 
 
 

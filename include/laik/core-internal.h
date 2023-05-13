@@ -84,7 +84,7 @@ struct _Laik_Instance {
     // for time logging
     struct timeval init_time;
 
-    const Laik_Backend* backend;
+    Laik_Backend* backend;
     void* backend_data;
 
     Laik_Space* firstSpaceForInstance;
@@ -107,7 +107,7 @@ struct _Laik_Instance {
 // allocate space for a new LAIK instance.
 // this is only to be called from backend initialization.
 // the world yet is invalid, needs to be created and attached by backend
-Laik_Instance* laik_new_instance(const Laik_Backend* b, int size, int myid,
+Laik_Instance* laik_new_instance(Laik_Backend* b, int size, int myid,
                                  int epoch, int phase,
                                  char* location, void* data);
 

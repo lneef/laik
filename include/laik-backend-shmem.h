@@ -27,11 +27,8 @@
 // returns the same object if called multiple times
 Laik_Instance* laik_init_shmem(int* argc, char*** argv);
 
-int laik_shmem_secondary_init(int primaryRank, int primarySize, int (*send)(int *, int, int),
+int laik_shmem_secondary_init(Laik_Instance*, int primaryRank, int primarySize, int (*send)(int *, int, int),
                          int (*recv)(int *, int, int));
-int laik_shmem_secondary_finalize();
-bool laik_aseq_replaceWithShmemCalls(Laik_ActionSeq *as);
-bool laik_shmem_secondary_exec(Laik_ActionSeq *as, Laik_Action *a);
-bool laik_shmem_log_action(Laik_Action *action);
+
 
 #endif // LAIK_BACKEND_SHMEM_H

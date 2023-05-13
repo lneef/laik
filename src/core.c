@@ -208,7 +208,7 @@ char* laik_mylocation(Laik_Instance* inst)
 }
 
 // allocate space for a new LAIK instance
-Laik_Instance* laik_new_instance(const Laik_Backend* b,
+Laik_Instance* laik_new_instance(Laik_Backend* b,
                                  int size, int myid, int epoch, int phase,
                                  char* location, void* data)
 {

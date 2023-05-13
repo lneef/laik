@@ -15,8 +15,7 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-#ifdef USE_MPI
-
+# ifdef USE_MPI
 #include "laik-internal.h"
 #include "laik-backend-mpi.h"
 
@@ -31,7 +30,6 @@
 #include <unistd.h>
 #include <string.h>
 
-#include <backends/shmem/shmem.h>
 #include <laik-backend-shmem.h>
 
 // forward decls, types/structs , global variables
@@ -211,7 +209,7 @@ bool laik_mpi_log_action(const Laik_Backend* this, Laik_Action* a)
     }
 
     default:
-        return laik_shmem_log_action(a);
+        return this->chain[a->chain_idx]->laik_secondary_log_action(a);
     }
     return true;
 }
@@ -412,7 +410,7 @@ Laik_Instance *laik_init_mpi(int *argc, char ***argv)
     send = &sendIntegers;
     recv = &recvIntegers;
     initComm = d->comm;
-    laik_shmem_secondary_init(rank, size, send, recv);
+    laik_shmem_secondary_init(inst, rank, size, send, recv);
 
     mpi_instance = inst;
     return inst;
@@ -434,6 +432,7 @@ void laik_mpi_finalize(const Laik_Backend* this, Laik_Instance* inst)
     (void) this;
     assert(inst == mpi_instance);
 
+    this->chain[0]->laik_secondary_finalize();
     if (mpiData(mpi_instance)->didInit)
     {
         int err = MPI_Finalize();
@@ -441,9 +440,6 @@ void laik_mpi_finalize(const Laik_Backend* this, Laik_Instance* inst)
             laik_mpi_panic(err);
     }
 
-    int err = laik_shmem_secondary_finalize();
-    if (err != SHMEM_SUCCESS)
-        laik_mpi_panic(-1);
 }
 
 // update backend specific data for group if needed
@@ -838,8 +834,6 @@ void laik_mpi_exec(const Laik_Backend* this, Laik_ActionSeq* as)
             laik_log_flush(0);
         }
 
-        int rank;
-        shmem_comm_rank(&rank);
         switch (a->type)
         {
         case LAIK_AT_BufReserve:
@@ -1083,7 +1077,7 @@ void laik_mpi_exec(const Laik_Backend* this, Laik_ActionSeq* as)
             break;
 
         default:
-            if(!laik_shmem_secondary_exec(as, a)){
+            if(!this->chain[a->chain_idx]->laik_secondary_exec(this, as, a)){
                 laik_log(LAIK_LL_Panic, "mpi_exec: no idea how to exec action %d (%s)",
                          a->type, laik_at_str(a->type));
                 assert(0);
@@ -1181,7 +1175,7 @@ void laik_mpi_prepare(const Laik_Backend* this, Laik_ActionSeq* as)
     // changed = laik_aseq_sort_rankdigits(as);
     laik_log_ActionSeqIfChanged(changed, as, "After sorting for deadlock avoidance");
 
-    changed = laik_aseq_replaceWithShmemCalls(as);
+    changed = this->chain[0]->laik_replace_secondary(this, as);
     laik_log_ActionSeqIfChanged(changed, as, "After replacing with shmem calls");
 
     if (mpi_async)

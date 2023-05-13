@@ -29,6 +29,8 @@ typedef struct _Laik_Error Laik_Error;
 // backend to use for a LAIK instance
 typedef struct _Laik_Backend Laik_Backend;
 
+typedef struct _Laik_Secondary Laik_Secondary;
+
 // a task group over which a index space gets distributed
 typedef struct _Laik_Group Laik_Group;
 
