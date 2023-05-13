@@ -1067,7 +1067,7 @@ void laik_aseq_add(Laik_Action* a, Laik_ActionSeq* as, int round)
     Laik_Action* aCopy;
     // this unsets mark
     aCopy = laik_aseq_addAction(as, a->len, a->type, round, a->tid);
-
+    aCopy -> chain_idx = a ->chain_idx;
     // any further action parameters to copy?
     size_t parLen = a->len - sizeof(Laik_Action);
     if (parLen > 0)

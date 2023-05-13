@@ -42,10 +42,10 @@
 struct _Laik_Action {
     unsigned char type;
     unsigned char len;
-    unsigned char round : 4;   // actions are order by rounds
-    unsigned char chain_idx : 4;
+    unsigned char round;   // actions are order by rounds
     unsigned char tid  :7; // ID of transition context for this action
     unsigned char mark :1; // boolean flag used in some transformations
+    uint64_t chain_idx;
 };
 
 // for iterating action sequences

@@ -861,7 +861,6 @@ bool laik_shmem_replace_secondary(const Laik_Backend* primary, Laik_ActionSeq *a
     shmem_get_secondaryRanks(secondaryRanks);
 
     bool ret = false;
-
     Laik_Action *a = as->action;
     for (unsigned int i = 0; i < as->actionCount; i++, a = nextAction(a))
     {
@@ -980,6 +979,7 @@ bool laik_shmem_replace_secondary(const Laik_Backend* primary, Laik_ActionSeq *a
         default:
             break;
         }
+        
     }
     
     free(colours);
