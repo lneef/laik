@@ -834,8 +834,7 @@ static void laik_shmem_sync(const Laik_Backend* this, Laik_KVStore *kvs)
 // Secondary backend functionality
 int laik_shmem_secondary_init(Laik_Instance* inst, int primaryRank, int primarySize, int (*send)(int *, int, int),
                          int (*recv)(int *, int, int))
-{      
-    inst->backend->chain = calloc(1, sizeof(void*));
+{  
     laik_secondary_shmem.chain_index = 0;
     inst -> backend -> chain[0] = &laik_secondary_shmem;
 
