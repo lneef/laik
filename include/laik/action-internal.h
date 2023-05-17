@@ -45,7 +45,7 @@ struct _Laik_Action {
     unsigned char round;   // actions are order by rounds
     unsigned char tid  :7; // ID of transition context for this action
     unsigned char mark :1; // boolean flag used in some transformations
-    unsigned char chain_idx;
+    unsigned int chain_idx;
 };
 
 // for iterating action sequences

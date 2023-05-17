@@ -410,6 +410,7 @@ Laik_Instance *laik_init_mpi(int *argc, char ***argv)
     send = &sendIntegers;
     recv = &recvIntegers;
     initComm = d->comm;
+    inst -> backend -> chain_length = 0;
     laik_shmem_secondary_init(inst, rank, size, send, recv);
 
     mpi_instance = inst;

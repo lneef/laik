@@ -37,9 +37,9 @@
 static void laik_shmem_finalize(const Laik_Backend*, Laik_Instance *);
 static void laik_shmem_prepare(const Laik_Backend*, Laik_ActionSeq *);
 static void laik_shmem_cleanup(const Laik_Backend*, Laik_ActionSeq *);
-static void laik_shmem_exec(const Laik_Backend*, Laik_ActionSeq *as);
+static void laik_shmem_exec(const Laik_Backend*, Laik_ActionSeq *);
 static void laik_shmem_updateGroup(const Laik_Backend*, Laik_Group *);
-static void laik_shmem_sync(const Laik_Backend* ,Laik_KVStore *kvs);
+static void laik_shmem_sync(const Laik_Backend* ,Laik_KVStore *);
 
 
 static void laik_shmem_secondary_finalize();
@@ -835,8 +835,8 @@ static void laik_shmem_sync(const Laik_Backend* this, Laik_KVStore *kvs)
 int laik_shmem_secondary_init(Laik_Instance* inst, int primaryRank, int primarySize, int (*send)(int *, int, int),
                          int (*recv)(int *, int, int))
 {  
-    laik_secondary_shmem.chain_index = 0;
-    inst -> backend -> chain[0] = &laik_secondary_shmem;
+    unsigned char idx = laik_secondary_shmem.chain_index = inst->backend->chain_length++;
+    inst -> backend -> chain[idx] = &laik_secondary_shmem;
 
     return shmem_secondary_init(primaryRank, primarySize, send, recv);
 }
