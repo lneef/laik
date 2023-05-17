@@ -38,14 +38,14 @@
 // funactions are defined. They may be useful by backends for optimizing
 // a sequence.
 
-// all actions must start with this 4-byte header
+// all actions must start with this 8-byte header
 struct _Laik_Action {
     unsigned char type;
     unsigned char len;
     unsigned char round;   // actions are order by rounds
     unsigned char tid  :7; // ID of transition context for this action
     unsigned char mark :1; // boolean flag used in some transformations
-    uint64_t chain_idx;
+    unsigned char chain_idx;
 };
 
 // for iterating action sequences
