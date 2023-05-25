@@ -860,30 +860,23 @@ bool laik_shmem_replace_secondary(const Laik_Backend* primary, Laik_ActionSeq *a
     int *secondaryRanks = malloc(size * sizeof(int));
     shmem_get_secondaryRanks(secondaryRanks);
 
+    const int chain_idx = laik_secondary_shmem.chain_index;
+
+    bool global_ret = false;
     bool ret = false;
     Laik_Action *a = as->action;
     for (unsigned int i = 0; i < as->actionCount; i++, a = nextAction(a))
     {
+        ret = false;
         switch (a->type)
         {
         case LAIK_AT_MapSend:
         {
             Laik_BackendAction *ba = (Laik_BackendAction *)a;
             if(colours[rank] == colours[ba->rank]){
+                ba = (Laik_BackendAction*) laik_aseq_addr(a, as, a->round, chain_idx);
                 ba->rank = secondaryRanks[ba->rank];
-                a->type = LAIK_AT_ShmemMapSend;
-                a->chain_idx = laik_secondary_shmem.chain_index;
-                ret = true;
-            }
-            break;
-        }
-        case LAIK_AT_RBufSend:
-        {
-            Laik_A_RBufSend *aa = (Laik_A_RBufSend *)a;
-            if(colours[rank] == colours[aa->to_rank]){
-                aa->to_rank = secondaryRanks[aa->to_rank];
-                a->type = LAIK_AT_ShmemRBufSend;
-                a->chain_idx = laik_secondary_shmem.chain_index;
+                ba->h.type = LAIK_AT_ShmemMapSend;
                 ret = true;
             }
             break;
@@ -892,9 +885,9 @@ bool laik_shmem_replace_secondary(const Laik_Backend* primary, Laik_ActionSeq *a
         {
             Laik_A_BufSend *aa = (Laik_A_BufSend *)a;
             if(colours[rank] == colours[aa->to_rank]){
+                aa = (Laik_A_BufSend*) laik_aseq_addr(a, as, a->round, chain_idx);
                 aa->to_rank = secondaryRanks[aa->to_rank];
-                a->type = LAIK_AT_ShmemBufSend;
-                a->chain_idx = laik_secondary_shmem.chain_index;
+                aa->h.type = LAIK_AT_ShmemBufSend;
                 ret = true;
             }
             break;
@@ -903,20 +896,9 @@ bool laik_shmem_replace_secondary(const Laik_Backend* primary, Laik_ActionSeq *a
         {
             Laik_BackendAction *ba = (Laik_BackendAction *)a;
             if(colours[rank] == colours[ba->rank]){
+                ba = (Laik_BackendAction*) laik_aseq_addr(a, as, a->round, chain_idx);
                 ba->rank = secondaryRanks[ba->rank];
-                a->type = LAIK_AT_ShmemMapRecv;
-                a->chain_idx = laik_secondary_shmem.chain_index;
-                ret = true;
-            }
-            break;
-        }
-        case LAIK_AT_RBufRecv:
-        {
-            Laik_A_RBufRecv *aa = (Laik_A_RBufRecv *)a;
-            if(colours[rank] == colours[aa->from_rank]){
-                aa->from_rank = secondaryRanks[aa->from_rank];
-                a->type = LAIK_AT_ShmemRBufRecv;
-                a->chain_idx = laik_secondary_shmem.chain_index;
+                ba->h.type = LAIK_AT_ShmemMapRecv;
                 ret = true;
             }
             break;
@@ -925,9 +907,9 @@ bool laik_shmem_replace_secondary(const Laik_Backend* primary, Laik_ActionSeq *a
         {
             Laik_A_BufRecv *aa = (Laik_A_BufRecv *)a;
             if(colours[rank] == colours[aa->from_rank]){
+                aa = (Laik_A_BufRecv*) laik_aseq_addr(a, as, a->round, chain_idx);
                 aa->from_rank = secondaryRanks[aa->from_rank];
-                a->type = LAIK_AT_ShmemBufRecv;
-                a->chain_idx = laik_secondary_shmem.chain_index;
+                aa->h.type = LAIK_AT_ShmemBufRecv;
                 ret = true;
             }
             break;
@@ -936,9 +918,9 @@ bool laik_shmem_replace_secondary(const Laik_Backend* primary, Laik_ActionSeq *a
         {
             Laik_A_MapPackAndSend *aa = (Laik_A_MapPackAndSend *)a;
             if(colours[rank] == colours[aa->to_rank]){
+                aa = (Laik_A_MapPackAndSend*) laik_aseq_addr(a, as, a->round, chain_idx);
                 aa->to_rank = secondaryRanks[aa->to_rank];
-                a->type = LAIK_AT_ShmemMapPackAndSend;
-                a->chain_idx = laik_secondary_shmem.chain_index;
+                aa->h.type = LAIK_AT_ShmemMapPackAndSend;
                 ret = true;
             }
             break;
@@ -947,9 +929,9 @@ bool laik_shmem_replace_secondary(const Laik_Backend* primary, Laik_ActionSeq *a
         {
             Laik_BackendAction *ba = (Laik_BackendAction *)a;
             if(colours[rank] == colours[ba->rank]){
+                ba = (Laik_BackendAction*) laik_aseq_addr(a, as, a->round, chain_idx);
                 ba->rank = secondaryRanks[ba->rank];
-                a->type = LAIK_AT_ShmemPackAndSend;
-                a->chain_idx = laik_secondary_shmem.chain_index;
+                ba->h.type = LAIK_AT_ShmemPackAndSend;
                 ret = true;
             }
             break;
@@ -958,9 +940,9 @@ bool laik_shmem_replace_secondary(const Laik_Backend* primary, Laik_ActionSeq *a
         {
             Laik_A_MapRecvAndUnpack *aa = (Laik_A_MapRecvAndUnpack *)a;
             if(colours[rank] == colours[aa->from_rank]){
+                aa = (Laik_A_MapRecvAndUnpack*) laik_aseq_addr(a, as, a->round, chain_idx);
                 aa->from_rank = secondaryRanks[aa->from_rank];
-                a->type = LAIK_AT_ShmemMapRecvAndUnpack;
-                a->chain_idx = laik_secondary_shmem.chain_index;
+                aa->h.type = LAIK_AT_ShmemMapRecvAndUnpack;
                 ret = true;
             }
             break;
@@ -969,9 +951,9 @@ bool laik_shmem_replace_secondary(const Laik_Backend* primary, Laik_ActionSeq *a
         {
             Laik_BackendAction *ba = (Laik_BackendAction *)a;
             if(colours[rank] == colours[ba->rank]){
+                ba = (Laik_BackendAction*) laik_aseq_addr(a, as, a->round, chain_idx);
                 ba->rank = secondaryRanks[ba->rank];
-                a->type = LAIK_AT_ShmemRecvAndUnpack;
-                a->chain_idx = laik_secondary_shmem.chain_index;
+                ba->h.type = LAIK_AT_ShmemRecvAndUnpack;
                 ret = true;
             }
             break;
@@ -979,11 +961,19 @@ bool laik_shmem_replace_secondary(const Laik_Backend* primary, Laik_ActionSeq *a
         default:
             break;
         }
+
+        global_ret |= ret;
+
+        if(!ret)
+            laik_aseq_add(a, as, a->round);
+
+
         
     }
     
     free(colours);
     free(secondaryRanks);
+    laik_aseq_activateNewActions(as);
     return ret;
 }
 

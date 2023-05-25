@@ -471,6 +471,9 @@ bool laik_aseq_allocBuffer(Laik_ActionSeq* as);
 // append action <ba> to <as>, change round if not negative
 void laik_aseq_add(Laik_Action* a, Laik_ActionSeq* as, int round);
 
+// similar to laik_aseq_add but also return action(for secondaries)
+Laik_Action* laik_aseq_addr(Laik_Action* a, Laik_ActionSeq* as, int round, unsigned int chain_idx);
+
 
 // just copy actions from oldAS into as
 void laik_aseq_copySeq(Laik_ActionSeq* as);
