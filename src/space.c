@@ -702,8 +702,8 @@ void cleanGroupList()
     // we keep the groupList array
 }
 
-static
-TaskGroup* newTaskGroup(int* group)
+
+static TaskGroup* newTaskGroup(int* group)
 {
     if (groupListCount == groupListSize) {
         // enlarge group list
@@ -724,7 +724,7 @@ TaskGroup* newTaskGroup(int* group)
     return g;
 }
 
-static int getTaskGroupSingle(int task)
+int getTaskGroupSingle(int task)
 {
     // already existing?
     for(int i = 0; i < groupListCount; i++)

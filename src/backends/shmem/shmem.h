@@ -42,6 +42,8 @@ int shmem_comm_colour(int *colourPtr);
 
 int shmem_get_identifier(int *ident);
 
+int shmem_colour_num(int* num);
+
 int shmem_send(void *buffer, int count, int datatype, int recipient);
 
 int shmem_recv(void *buffer, int count, int datatype, int sender, int *recieved);
