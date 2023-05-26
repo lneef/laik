@@ -991,14 +991,14 @@ static void create_primaryReduce(Laik_ActionSeq *as, int round, char* frombuf,ch
     laik_aseq_addGroupReduce(as, round, group, group,frombuf, tobuf, count, redOp);
 }
 
-static void replace_reduce(Laik_ActionSeq *as, Laik_Action* a)
+static bool replace_reduce(Laik_ActionSeq *as, Laik_Action* a)
 {    
     Laik_BackendAction* ba = (Laik_BackendAction*) a;
     
     //TODO no all reduce
     if(ba -> rank != -1){
         laik_log(2, "No all reduce");
-        return;
+        return false;
     }
     
     unsigned char rd = a -> round;
@@ -1009,7 +1009,7 @@ static void replace_reduce(Laik_ActionSeq *as, Laik_Action* a)
 
     Laik_TransitionContext *tc = as->context[0];
     Laik_Data* data = tc -> data;
-    
+
     unsigned int bufSize = size * data -> elemsize * ba->count;
 
     if(rank == 0){
@@ -1076,6 +1076,8 @@ static void replace_reduce(Laik_ActionSeq *as, Laik_Action* a)
         ar->from_rank = 0;
         ar->buf = ba -> toBuf;
     }
+
+    return true;
 }
 
 bool laik_shmem_replace_secondary(const Laik_Backend* primary, Laik_ActionSeq *as)
@@ -1112,9 +1114,8 @@ bool laik_shmem_replace_secondary(const Laik_Backend* primary, Laik_ActionSeq *a
         }
         case LAIK_AT_Reduce:
         {
-            replace_reduce(as, a);
+            ret = replace_reduce(as, a);
             laik_log(2, "Reduce replaced");
-            ret = true;
             break;
         }
         case LAIK_AT_BufSend:
