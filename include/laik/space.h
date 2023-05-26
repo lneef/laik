@@ -24,6 +24,7 @@
 #include "core.h"     // for Laik_Group, Laik_Instance
 
 
+
 /*********************************************************************/
 /* LAIK Spaces Module - Distributed partitioning of index spaces
  *********************************************************************/
@@ -469,6 +470,8 @@ void laik_taskrange_set_data(Laik_TaskRange*trange, void* data);
 int laik_taskrange_get_mapNo(Laik_TaskRange*trange);
 int laik_taskrange_get_tag(Laik_TaskRange* trange);
 
+//TaskGroup* newTaskGroup(int* group);
+
 // get a custom data pointer from the partitioner
 void* laik_partitioner_data(Laik_Partitioner* partitioner);
 
@@ -552,6 +555,9 @@ laik_calc_transition(Laik_Space* space,
 
 // free a transition
 void laik_free_transition(Laik_Transition* t);
+
+int getTaskGroupSingle(int task);
+
 
 
 #endif // LAIK_SPACE_H

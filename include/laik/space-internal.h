@@ -252,7 +252,7 @@ struct _Laik_Transition {
     int dims;
     int actionCount;
 
-    // local ranges staying local;
+    // local ranges staying dtypelocal;
     // may need copy when different from/to mappings are used
     int localCount;
     struct localTOp *local;

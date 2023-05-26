@@ -47,6 +47,7 @@ struct groupInfo
     int size;
     int rank;
     int colour;
+    int num_islands;
     int *colours;
     int *secondaryRanks;
 };
@@ -176,6 +177,11 @@ int shmem_init()
     if(err != SHMEM_SUCCESS)
         return err;
 
+    return SHMEM_SUCCESS;
+}
+
+int shmem_colour_num(int* num){
+    *num = groupInfo.num_islands;
     return SHMEM_SUCCESS;
 }
 
@@ -504,7 +510,7 @@ int shmem_secondary_init(int primaryRank, int primarySize, int (*send)(int *, in
         int groupSizes[primarySize];
         memset(groupSizes, 0, primarySize * sizeof(int));
         for (int i = 0; i < primarySize; i++)
-        {
+        {   
             groupSizes[groupInfo.colours[i]]++;
         }
 
