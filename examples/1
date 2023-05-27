@@ -26,7 +26,7 @@ int main(int argc, char* argv[])
     laik_fill_double(sum, mysum);
     // we specify that all values from writers should be added using a
     // sum reduction, with the result available at master (process 0)
-    laik_switchto_new_partitioning(sum, world, laik_All,
+    laik_switchto_new_partitioning(sum, world, laik_Master,
                                    LAIK_DF_Preserve, LAIK_RO_Sum);
     if (laik_myid(world) == 0) {
         laik_get_map_1d(sum, 0, (void**) &base, &count);

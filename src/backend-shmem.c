@@ -103,6 +103,7 @@ typedef struct
     Laik_Action h;
     unsigned int size;
     char *buf;
+    char *tobuf;
     unsigned int count;
     Laik_ReductionOperation redOp;
 } Laik_ShmemLocalReduce;
@@ -166,7 +167,7 @@ static void add_Laik_ShmemDeleteBuf(Laik_ActionSeq* as, int round, char* buf)
     a->buf = buf;
 }
 
-static void add_Laik_ShmemLocalReduce(Laik_ActionSeq* as, int round, char* buf, int count, unsigned int size, Laik_ReductionOperation redOp)
+static void add_Laik_ShmemLocalReduce(Laik_ActionSeq* as, int round, char* buf, int count, unsigned int size, Laik_ReductionOperation redOp, char* tobuf)
 {
     Laik_ShmemLocalReduce* a;
     a = (Laik_ShmemLocalReduce*)laik_aseq_addAction(as, sizeof(*a),
@@ -176,6 +177,7 @@ static void add_Laik_ShmemLocalReduce(Laik_ActionSeq* as, int round, char* buf, 
     a->count = count;
     a->redOp = redOp;
     a->size = size;
+    a->tobuf = tobuf;
 
 
 }
@@ -496,7 +498,11 @@ static void laik_shmem_exec_LocalReduce(Laik_Action* a, Laik_TransitionContext* 
     Laik_Data* data = tc -> data;
 
     for(unsigned i = 1; i < ba -> size; ++i){
-        data -> type -> reduce(ba->buf, ba->buf, ba->buf + i * data -> elemsize, ba->count, ba->redOp);
+        data -> type -> reduce(ba->buf, ba->buf, ba->buf + i * data -> elemsize * ba->count, ba->count, ba->redOp);
+    }
+
+    if(sec_size == 1){
+        memcpy(ba->tobuf, ba->buf, ba->count * data -> elemsize);
     }
 
 }
@@ -942,8 +948,8 @@ int laik_shmem_secondary_init(Laik_Instance* inst, int primaryRank, int primaryS
 
     int sizes[primarySize] = {};
     int islands = 0;
-    int colour[primarySize];
-    shmem_get_colours(colour);
+    int *colour;
+    shmem_get_colours(&colour);
 
     for(int i = 0; i<primarySize; ++i){
         if(sizes[colour[i]] == 0)
@@ -991,34 +997,38 @@ static void create_primaryReduce(Laik_ActionSeq *as, int round, char* frombuf,ch
     laik_aseq_addGroupReduce(as, round, group, group,frombuf, tobuf, count, redOp);
 }
 
-static bool replace_reduce(Laik_ActionSeq *as, Laik_Action* a)
+static void replace_reduce(Laik_ActionSeq *as, Laik_Action* a, int* colours, int* secondaryRanks)
 {    
     Laik_BackendAction* ba = (Laik_BackendAction*) a;
-    
-    //TODO no all reduce
-    if(ba -> rank != -1){
-        laik_log(2, "No all reduce");
-        return false;
-    }
+    int master = ba -> rank;
+    int local = 0;
     
     unsigned char rd = a -> round;
-    int size, rank;
+    int size, rank, colour;
     
     shmem_comm_rank(&rank);
     shmem_comm_size(&size);
+    shmem_comm_colour(&colour);
 
     Laik_TransitionContext *tc = as->context[0];
     Laik_Data* data = tc -> data;
 
+    if(master != -1 && colour == colours[master]){
+        local = secondaryRanks[master];
+    }
     unsigned int bufSize = size * data -> elemsize * ba->count;
 
-    if(rank == 0){
+    laik_log(2, "%d", ba -> count);
+
+    if(rank == local){
         char* reducebuf = def_shmem_malloc(data, bufSize);
         add_Laik_ShmemBufInit(as, rd++, ba -> fromBuf, reducebuf, ba -> redOp, ba -> count);
 
         unsigned off = ba -> count * data -> elemsize;
 
-        for(int i = 1; i < size; ++i){
+        for(int i = 0; i < size; ++i){
+            if(i == local) continue;
+
             Laik_A_BufRecv* a;
             a = (Laik_A_BufRecv*) laik_aseq_addAction(as, sizeof(*a),
                                              LAIK_AT_ShmemBufRecv, rd, 0);
@@ -1032,7 +1042,7 @@ static bool replace_reduce(Laik_ActionSeq *as, Laik_Action* a)
 
         ++rd;
 
-        add_Laik_ShmemLocalReduce(as, rd, reducebuf, ba -> count, size, ba -> redOp);
+        add_Laik_ShmemLocalReduce(as, rd, reducebuf, ba -> count, size, ba -> redOp, ba->toBuf);
 
         ++rd;
 
@@ -1040,6 +1050,8 @@ static bool replace_reduce(Laik_ActionSeq *as, Laik_Action* a)
             create_primaryReduce(as, rd, reducebuf, ba -> toBuf, ba -> redOp, ba -> count);
             rd = 3*rd+3;
         }
+
+        if(master != -1) return;
 
         for(int i = 1; i < size; ++i){
             Laik_A_BufSend* a;
@@ -1062,10 +1074,13 @@ static bool replace_reduce(Laik_ActionSeq *as, Laik_Action* a)
         a = (Laik_A_BufSend*) laik_aseq_addAction(as, sizeof(*a), LAIK_AT_ShmemBufSend, rd, 0);
         a->h.chain_idx = laik_secondary_shmem.chain_index;
         a->count = ba->count;
-        a->to_rank = 0;
+        a->to_rank = local;
         a->buf = ba -> fromBuf;
 
-        rd += 5;
+        if(master != -1) return;
+
+        rd += 2;
+        rd = 3*rd +3;
 
         Laik_A_BufRecv* ar;
         ar = (Laik_A_BufRecv*) laik_aseq_addAction(as, sizeof(*ar),
@@ -1076,8 +1091,6 @@ static bool replace_reduce(Laik_ActionSeq *as, Laik_Action* a)
         ar->from_rank = 0;
         ar->buf = ba -> toBuf;
     }
-
-    return true;
 }
 
 bool laik_shmem_replace_secondary(const Laik_Backend* primary, Laik_ActionSeq *as)
@@ -1086,10 +1099,10 @@ bool laik_shmem_replace_secondary(const Laik_Backend* primary, Laik_ActionSeq *a
     int size, rank;
     shmem_comm_size(&size);
     shmem_comm_rank(&rank);
-    int *colours = malloc(size * sizeof(int));
-    shmem_get_colours(colours);
-    int *secondaryRanks = malloc(size * sizeof(int));
-    shmem_get_secondaryRanks(secondaryRanks);
+    int* colours;
+    shmem_get_colours(&colours);
+    int *secondaryRanks;
+    shmem_get_secondaryRanks(&secondaryRanks);
 
     const int chain_idx = laik_secondary_shmem.chain_index;
 
@@ -1114,8 +1127,8 @@ bool laik_shmem_replace_secondary(const Laik_Backend* primary, Laik_ActionSeq *a
         }
         case LAIK_AT_Reduce:
         {
-            ret = replace_reduce(as, a);
-            laik_log(2, "Reduce replaced");
+            replace_reduce(as, a, colours, secondaryRanks);
+            ret = true;
             break;
         }
         case LAIK_AT_BufSend:
@@ -1208,8 +1221,6 @@ bool laik_shmem_replace_secondary(const Laik_Backend* primary, Laik_ActionSeq *a
         
     }
     
-    free(colours);
-    free(secondaryRanks);
     laik_aseq_activateNewActions(as);
     return global_ret;
 }

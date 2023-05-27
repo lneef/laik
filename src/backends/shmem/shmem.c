@@ -546,15 +546,15 @@ int shmem_secondary_init(int primaryRank, int primarySize, int (*send)(int *, in
     return SHMEM_SUCCESS;
 }
 
-int shmem_get_colours(int *buf)
+int shmem_get_colours(int **buf)
 {
-    memcpy(buf, groupInfo.colours, groupInfo.size * sizeof(int));
+    *buf = groupInfo.colours;
     return SHMEM_SUCCESS;
 }
 
-int shmem_get_secondaryRanks(int *buf)
+int shmem_get_secondaryRanks(int **buf)
 {
-    memcpy(buf, groupInfo.secondaryRanks, groupInfo.size * sizeof(int));
+    *buf = groupInfo.secondaryRanks;
     return SHMEM_SUCCESS;
 }
 
