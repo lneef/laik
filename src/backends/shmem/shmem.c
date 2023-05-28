@@ -48,6 +48,7 @@ struct groupInfo
     int rank;
     int colour;
     int num_islands;
+    int *primarys;
     int *colours;
     int *secondaryRanks;
 };
@@ -177,6 +178,16 @@ int shmem_init()
     if(err != SHMEM_SUCCESS)
         return err;
 
+    return SHMEM_SUCCESS;
+}
+
+int shmem_get_island_num(int* num){
+    *num = groupInfo.num_islands;
+    return SHMEM_SUCCESS;
+}
+
+int shmem_get_primarys(int** primarys){
+    *primarys = groupInfo.primarys;
     return SHMEM_SUCCESS;
 }
 
@@ -435,6 +446,9 @@ int shmem_finalize()
     
     if (groupInfo.secondaryRanks != NULL)
         free(groupInfo.secondaryRanks);
+    
+    if(groupInfo.primarys != NULL)
+        free(groupInfo.primarys);
 
     return SHMEM_SUCCESS;
 }
@@ -511,7 +525,17 @@ int shmem_secondary_init(int primaryRank, int primarySize, int (*send)(int *, in
         memset(groupSizes, 0, primarySize * sizeof(int));
         for (int i = 0; i < primarySize; i++)
         {   
+            if(groupSizes[groupInfo.colours[i]] == 0)
+                groupInfo.num_islands++;
+
             groupSizes[groupInfo.colours[i]]++;
+        }
+        groupInfo.primarys = malloc(groupInfo.num_islands * sizeof(int));
+
+        int ii = 0;
+        for(int i=0; i<primarySize; ++i){
+            if(groupSizes[i] != 0)
+                groupInfo.primarys[ii++] = i;
         }
 
         for (int i = 1; i < primarySize; i++)
@@ -519,6 +543,8 @@ int shmem_secondary_init(int primaryRank, int primarySize, int (*send)(int *, in
             (*send)(&groupSizes[groupInfo.colours[i]], 1, i);
             (*send)(groupInfo.colours, primarySize, i);
             (*send)(groupInfo.secondaryRanks, primarySize, i);
+            (*send)(&groupInfo.num_islands, 1, i);
+            (*send)(groupInfo.primarys, groupInfo.num_islands, i);
         }
         groupInfo.size = groupSizes[groupInfo.colours[0]];
     }
@@ -532,6 +558,10 @@ int shmem_secondary_init(int primaryRank, int primarySize, int (*send)(int *, in
         (*recv)(groupInfo.colours, groupInfo.size, 0);
         groupInfo.secondaryRanks = malloc(primarySize * sizeof(int));
         (*recv)(groupInfo.secondaryRanks, groupInfo.size, 0);
+
+        (*recv)(&groupInfo.num_islands, 1, 0);
+        groupInfo.primarys = malloc(groupInfo.num_islands * sizeof(int));
+        (*recv)(groupInfo.primarys, groupInfo.num_islands, 0);
     }
 
     if (groupInfo.rank == 0 && shmctl(openShmid, IPC_RMID, 0) == -1)

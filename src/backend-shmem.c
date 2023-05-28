@@ -127,10 +127,6 @@ typedef struct
 //#define PACKBUFSIZE (10*800)
 static char packbuf[PACKBUFSIZE];
 
-int sec_size;
-
-int *primarys;
-
 //----------------------------------------------------------------------------
 // error helpers
 
@@ -181,10 +177,6 @@ static void add_Laik_ShmemLocalReduce(Laik_ActionSeq* as, int round, char* buf, 
 
 
 }
-
-
-
-
 
 
 //----------------------------------------------------------------------------
@@ -499,10 +491,6 @@ static void laik_shmem_exec_LocalReduce(Laik_Action* a, Laik_TransitionContext* 
 
     for(unsigned i = 1; i < ba -> size; ++i){
         data -> type -> reduce(ba->buf, ba->buf, ba->buf + i * data -> elemsize * ba->count, ba->count, ba->redOp);
-    }
-
-    if(sec_size == 1){
-        //memcpy(ba->tobuf, ba->buf, ba->count * data -> elemsize);
     }
 
 }
@@ -944,41 +932,12 @@ int laik_shmem_secondary_init(Laik_Instance* inst, int primaryRank, int primaryS
     unsigned char idx = laik_secondary_shmem.chain_index = inst->backend->chain_length++;
     inst -> backend -> chain[idx] = &laik_secondary_shmem;
 
-    int err = shmem_secondary_init(primaryRank, primarySize, send, recv);
-
-    int sizes[primarySize] = {};
-    int islands = 0;
-    int *colour;
-    shmem_get_colours(&colour);
-
-    for(int i = 0; i<primarySize; ++i){
-        if(sizes[colour[i]] == 0)
-            islands++;
-        
-        sizes[colour[i]]++;
-    }
-
-    primarys = malloc(islands * sizeof(int));
-
-    sec_size = islands;
-
-    int j = 0;
-    for(int i = 0; i<primarySize; ++i){
-        if(sizes[i] > 0)
-            primarys[j++] = i;
-    }
-
-    laik_log(2, "Number of shared memory islands %d", islands);
-
-    return err;
-
+    return shmem_secondary_init(primaryRank, primarySize, send, recv);
 }
 
 void laik_shmem_secondary_finalize()
 {   
     int err = shmem_finalize();
-
-    free(primarys);
 
     if(err != SHMEM_SUCCESS)
         laik_panic("Finalizing shared memory backend failes");
@@ -986,13 +945,17 @@ void laik_shmem_secondary_finalize()
 
 static void create_primaryReduce(Laik_ActionSeq *as, int round, char* frombuf,char* tobuf, Laik_ReductionOperation redOp, int count, int master)
 {
+    int num_islands;
+    shmem_get_island_num(&num_islands);
+    int *primarys;
+    shmem_get_primarys(&primarys);
     Laik_TransitionContext *tc = as->context[0];
     Laik_Transition* t = tc->transition;
     int task = t -> subgroupCount++;
     int group = getTaskGroupSingle(task);
-    t->subgroup[group].task = malloc(sec_size * sizeof(int));
-    memcpy(t->subgroup[group].task, primarys, sec_size * sizeof(int));
-    t->subgroup[group].count = sec_size;
+    t->subgroup[group].task = malloc(num_islands * sizeof(int));
+    memcpy(t->subgroup[group].task, primarys, num_islands * sizeof(int));
+    t->subgroup[group].count = num_islands;
 
     if(master == -1){
         laik_aseq_addGroupReduce(as, round, group, group,frombuf, tobuf, count, redOp);

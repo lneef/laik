@@ -55,6 +55,10 @@ int shmem_secondary_init(int primaryRank, int primarySize, int (*send)(int *, in
 
 int shmem_get_colours(int **buf);
 
+int shmem_get_island_num(int *num);
+
+int shmem_get_primarys(int **buf);
+
 int shmem_get_secondaryRanks(int **buf);
 
 int shmem_finalize();
