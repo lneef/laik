@@ -458,6 +458,7 @@ int shmem_secondary_init(int primaryRank, int primarySize, int (*send)(int *, in
 {
     signal(SIGINT, deleteOpenShmSegs);
 
+    bool created = false;
     struct shmInitSeg *shmp;
     int shmid = shmget(SHM_KEY, sizeof(struct shmInitSeg), IPC_EXCL | 0644 | IPC_CREAT);
     if (shmid == -1)
@@ -482,7 +483,6 @@ int shmem_secondary_init(int primaryRank, int primarySize, int (*send)(int *, in
         while (!shmp->didInit)
         {
         }
-        groupInfo.rank = ++shmp->rank;
         groupInfo.colour = shmp->colour;
 
         if (shmdt(shmp) == -1)
@@ -493,7 +493,6 @@ int shmem_secondary_init(int primaryRank, int primarySize, int (*send)(int *, in
         // Master initialization
         openShmid = shmid;
 
-        groupInfo.rank = 0;
         groupInfo.colour = primaryRank;
 
         shmp = shmat(shmid, NULL, 0);
@@ -518,25 +517,34 @@ int shmem_secondary_init(int primaryRank, int primarySize, int (*send)(int *, in
         for (int i = 1; i < primarySize; i++)
         {
             (*recv)(&groupInfo.colours[i], 1, i);
-            (*recv)(&groupInfo.secondaryRanks[i], 1, i);
         }
 
+        int ii = 0;
         int groupSizes[primarySize];
         memset(groupSizes, 0, primarySize * sizeof(int));
+        groupInfo.primarys = malloc(primarySize * sizeof(int));
+
         for (int i = 0; i < primarySize; i++)
         {   
             if(groupSizes[groupInfo.colours[i]] == 0)
+            {
                 groupInfo.num_islands++;
+                groupInfo.primarys[ii++] = i; 
+            }
+            
+            int sec_rank = groupSizes[groupInfo.colours[i]]++;
 
-            groupSizes[groupInfo.colours[i]]++;
-        }
-        groupInfo.primarys = malloc(groupInfo.num_islands * sizeof(int));
+            if(i == 0){
+                groupInfo.rank = sec_rank;
+            }else{
+                (*send)(&sec_rank, 1, i);
+            }
 
-        int ii = 0;
-        for(int i=0; i<primarySize; ++i){
-            if(groupSizes[i] != 0)
-                groupInfo.primarys[ii++] = i;
+            groupInfo.secondaryRanks[i] = sec_rank;
         }
+
+        groupInfo.primarys = realloc(groupInfo.primarys, groupInfo.num_islands * sizeof(int));
+        
 
         for (int i = 1; i < primarySize; i++)
         {
@@ -551,8 +559,8 @@ int shmem_secondary_init(int primaryRank, int primarySize, int (*send)(int *, in
     else
     {
         (*send)(&groupInfo.colour, 1, 0);
-        (*send)(&groupInfo.rank, 1, 0);
 
+        (*recv)(&groupInfo.rank, 1, 0);
         (*recv)(&groupInfo.size, 1, 0);
         groupInfo.colours = malloc(primarySize * sizeof(int));
         (*recv)(groupInfo.colours, groupInfo.size, 0);
@@ -564,7 +572,7 @@ int shmem_secondary_init(int primaryRank, int primarySize, int (*send)(int *, in
         (*recv)(groupInfo.primarys, groupInfo.num_islands, 0);
     }
 
-    if (groupInfo.rank == 0 && shmctl(openShmid, IPC_RMID, 0) == -1)
+    if (created && shmctl(openShmid, IPC_RMID, 0) == -1)
         return SHMEM_SHMCTL_FAILED;
     openShmid = -1;
 

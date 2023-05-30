@@ -724,7 +724,7 @@ static TaskGroup* newTaskGroup(int* group)
     return g;
 }
 
-int getTaskGroupSingle(int task)
+static int getTaskGroupSingle(int task)
 {
     // already existing?
     for(int i = 0; i < groupListCount; i++)

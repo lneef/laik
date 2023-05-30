@@ -556,8 +556,4 @@ laik_calc_transition(Laik_Space* space,
 // free a transition
 void laik_free_transition(Laik_Transition* t);
 
-int getTaskGroupSingle(int task);
-
-
-
 #endif // LAIK_SPACE_H
