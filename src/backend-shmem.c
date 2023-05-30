@@ -1342,7 +1342,7 @@ bool laik_shmem_log_action(Laik_Action *a){
     case LAIK_AT_ShmemBufRecv:
     {
         Laik_A_BufRecv* aa = (Laik_A_BufRecv*) a;
-        laik_log_append(": T%d ==> to %p, count %d (shmem)",
+        laik_log_append(": S%d ==> to %p, count %d (shmem)",
                         aa->from_rank,
                         aa->buf,
                         aa->count);
@@ -1365,7 +1365,7 @@ bool laik_shmem_log_action(Laik_Action *a){
     case LAIK_AT_ShmemMapRecvAndUnpack:
     {
         Laik_A_MapRecvAndUnpack* aa = (Laik_A_MapRecvAndUnpack*) a;
-        laik_log_append(": T%d ==> ", aa->from_rank);
+        laik_log_append(": s%d ==> ", aa->from_rank);
         laik_log_Range(aa->range);
         laik_log_append(" mapNo %d, count %llu (shmem)",
                         aa->toMapNo, (unsigned long long) aa->count);
@@ -1374,6 +1374,21 @@ bool laik_shmem_log_action(Laik_Action *a){
     case LAIK_AT_ShmemRecvAndUnpack:
     {
         laik_log_append("ShmemPackAndSend");
+        break;
+    }
+    case LAIK_AT_ShmemDeleteBuf:
+    {
+        laik_log_append("ShmemDeleteBuf");
+        break;
+    }
+    case LAIK_AT_ShmemIslandReduce:
+    {
+        laik_log_append("ShmemIslandReduce");
+        break;
+    }
+    case LAIK_AT_ShmemBroadcast:
+    {
+        laik_log_append("ShmemBroadcast");
         break;
     }
     default:
