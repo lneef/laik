@@ -553,7 +553,7 @@ static void laik_shmem_exec_GroupBroadCast(Laik_Action* a, Laik_TransitionContex
 
     for(int i = ba->ranks; i < ba->outputSize; ++i)
     {
-        int task = laik_secondary_taskInGroup(tc -> transition, ba ->group , i , ba -> outputSize);
+        int task = laik_secondary_taskInGroup(tc -> transition, ba ->group , i, laik_secondary_shmem.chain_index);
 
         shmem_send(ba->buf, ba->count, getSHMEMDataType(data), task);
     }
@@ -573,7 +573,7 @@ static void laik_shmem_exec_GroupReduce(Laik_Action * a, Laik_TransitionContext*
 
     for(int i = ba->ranks; i < ba->inputSize; ++i)
     {   
-        int task = laik_secondary_taskInGroup(tc -> transition, ba ->group , i , ba -> inputSize);
+        int task = laik_secondary_taskInGroup(tc -> transition, ba ->group , i, laik_secondary_shmem.chain_index);
         shmem_recv(ba -> buf + currentOff, ba->count, getSHMEMDataType(data), task, &received);
 
         currentOff += off; 
@@ -602,7 +602,6 @@ static void laik_shmem_exec_Reduce(Laik_Action* a, Laik_TransitionContext* tc)
     Laik_Data* data = tc -> data;
 
     data->type->init(ba->buf, ba->count , ba->redOp);
-
     memcpy(ba->buf, ba->frombuf, ba->count * data->elemsize);
 
     unsigned off = ba -> count * data -> elemsize;
@@ -611,7 +610,6 @@ static void laik_shmem_exec_Reduce(Laik_Action* a, Laik_TransitionContext* tc)
     for(int i = 0; i < ba->size; ++i)
     {   
             if(i == ba -> rank) continue;
-
             shmem_recv(ba->buf + off, ba->count, getSHMEMDataType(data), i, &received);
             off += ba -> count * data -> elemsize;
     }
@@ -1301,7 +1299,7 @@ bool laik_shmem_replace_secondary(const Laik_Backend* primary, Laik_ActionSeq *a
 
     for(int i = 0; i < groupCount; ++i)
     {   
-        transformSubGroup(t, i, &subgroupInfo[i]);
+        transformSubGroup(t, i, &subgroupInfo[i], laik_secondary_shmem.chain_index);
     }
 
     bool global_ret = false;

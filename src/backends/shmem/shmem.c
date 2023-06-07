@@ -719,7 +719,7 @@ void def_shmem_free(Laik_Data* d, void* ptr){
     
 }
 
-void transformSubGroup(Laik_Transition* t, int subgroup, groupTransform* group){
+void transformSubGroup(Laik_Transition* t, int subgroup, groupTransform* group, int chain_idx){
     int primary = -1;
     bool member = false;
     int last = 0;
@@ -733,9 +733,8 @@ void transformSubGroup(Laik_Transition* t, int subgroup, groupTransform* group){
     int count = laik_trans_groupCount(t , subgroup);
 
     if(count == t->group->size)
-    {
-        t->subgroup[subgroup].count = groupInfo.num_islands;
-        memcpy(t->subgroup[subgroup].task, groupInfo.primarys, groupInfo.num_islands * sizeof(int));
+    {   
+        laik_secondary_updateGroup(t, subgroup, 0, groupInfo.primarys, groupInfo.num_islands, -1);
         return;
     }
 
@@ -745,7 +744,7 @@ void transformSubGroup(Laik_Transition* t, int subgroup, groupTransform* group){
 
         if(processed[groupInfo.colours[inTask]] == -1)
         {
-            t->subgroup[subgroup].task[last] = inTask;
+            laik_secondary_updateTask(t, subgroup, last, inTask);
             ++last;
             processed[groupInfo.colours[inTask]] = inTask;
         }
@@ -760,9 +759,7 @@ void transformSubGroup(Laik_Transition* t, int subgroup, groupTransform* group){
 
     primary = groupInfo.secondaryRanks[processed[groupInfo.colour]]; 
 
-    t->subgroup[subgroup].count = last; 
-
-    if(ii > 1) memcpy(&t->subgroup[subgroup].task[last], &tmp[1], (ii - 1) * sizeof(int));
+    laik_secondary_updateGroup(t, subgroup, last, &tmp[1], ii - 1, chain_idx);
 
     group->primary = primary;
     group->member = member;

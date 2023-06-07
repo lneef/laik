@@ -19,6 +19,7 @@
 #ifndef LAIK_SPACE_INTERNAL_H
 #define LAIK_SPACE_INTERNAL_H
 
+#include "laik/space.h"
 #include <laik.h>     // for Laik_Index, Laik_Partitioning
 #include <stdbool.h>  // for bool
 #include <stdint.h>   // for int64_t
@@ -221,7 +222,8 @@ struct recvTOp {
 
 // referenced in reduction operation within a transition
 typedef struct _TaskGroup {
-    int count;
+    //at most 3 secondaries
+    int count[4];
     int* task; // sorted list
 } TaskGroup;
 
@@ -294,7 +296,13 @@ int laik_trans_taskInGroup(Laik_Transition* t, int subgroup, int i);
 bool laik_trans_isInGroup(Laik_Transition* t, int subgroup, int task);
 
 // return task ID in secondary backend in group with ID <subgroup> in transition <t>
-int laik_secondary_taskInGroup(Laik_Transition* t, int subgroup, int i, int section);
+int laik_secondary_taskInGroup(Laik_Transition* t, int subgroup, int i, int chain_idx);
+
+// update task group by replacing some tasks with secondary specific task IDs
+void laik_secondary_updateGroup(Laik_Transition* t, int subgroup, int count, int* myranks, int myrankNum, int chain_idx);
+
+// update task ID at position <i>
+void laik_secondary_updateTask(Laik_Transition* t, int subgroup, int id, int task);
 
 // initialize the LAIK space module, called from laik_new_instance
 void laik_space_init(void);

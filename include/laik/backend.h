@@ -86,7 +86,7 @@ struct _Laik_Backend {
   // resize is finished. They can be marked as dead and resources freed
   void (*finish_resize)(const Laik_Backend*);
   
-#define MAX_SECONDARIES 5
+#define MAX_SECONDARIES 3
   Laik_Secondary* chain[MAX_SECONDARIES];
 
   unsigned char chain_length;

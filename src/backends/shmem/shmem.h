@@ -76,6 +76,6 @@ void* def_shmem_malloc(Laik_Data* d, size_t size);
 
 void def_shmem_free(Laik_Data* d, void* ptr);
 
-void transformSubGroup(Laik_Transition* t, int subgroup, groupTransform* subgroups);
+void transformSubGroup(Laik_Transition* t, int subgroup, groupTransform* subgroups, int chain_idx);
 
 #endif

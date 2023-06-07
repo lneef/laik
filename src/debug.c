@@ -142,7 +142,7 @@ void laik_log_TransitionGroup(Laik_Transition* t, int group)
     TaskGroup* tg = &(t->subgroup[group]);
 
     laik_log_append("(");
-    for(int i = 0; i < tg->count; i++) {
+    for(int i = 0; i < tg->count[0]; i++) {
         if (i > 0) laik_log_append(",");
         laik_log_append("T%d", tg->task[i]);
     }
