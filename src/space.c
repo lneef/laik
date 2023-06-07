@@ -681,12 +681,7 @@ bool laik_index_global2local(Laik_Partitioning* p,
 
 // helper functions for laik_calc_transition
 
-// TODO:
-// - quadratic complexity for 2d/3d spaces
-// - for 1d, does not cope with overlapping ranges belonging to same task
-
-// print verbose debug output for creating ranges for reductions?
-#define DEBUG_REDUCTIONRANGES 1
+// TODO:UGDEBUG_REDUCTIONRANGES 1
 
 
 static TaskGroup* groupList = 0;
@@ -1313,8 +1308,8 @@ void calcAddReductions(int tflags,
 #endif
 
                 // convert to all-group if possible
-                if (groupList[in].count == group->size) in = -1;
-                if (groupList[out].count == group->size) out = -1;
+                //if (groupList[in].count == group->size) in = -1;
+                //if (groupList[out].count == group->size) out = -1;
 
                 assert(redOp != LAIK_RO_None); // must be a real reduction
                 appendRedTOp(&range, redOp, in, out,
@@ -1702,6 +1697,13 @@ bool laik_trans_isInGroup(Laik_Transition* t, int subgroup, int task)
     for(int i = 0; i < tg->count; i++)
         if (tg->task[i] == task) return true;
     return false;
+}
+
+int laik_secondary_taskInGroup(Laik_Transition* t, int subgroup, int i, int section){
+    assert(i < section);
+    assert(subgroup < t->subgroupCount);
+
+    return t -> subgroup[subgroup].task[i];
 }
 
 

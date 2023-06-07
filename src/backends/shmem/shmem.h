@@ -32,6 +32,15 @@
 
 #define SHMEM_MAX_ERROR_STRING 100
 
+typedef struct
+{
+    int primary;
+    int sectionB;
+    int sectionE;
+    bool member;
+} groupTransform;
+
+
 int shmem_init();
 
 int shmem_comm_size(int *sizePtr);
@@ -66,5 +75,7 @@ int shmem_finalize();
 void* def_shmem_malloc(Laik_Data* d, size_t size);
 
 void def_shmem_free(Laik_Data* d, void* ptr);
+
+void transformSubGroup(Laik_Transition* t, int subgroup, groupTransform* subgroups);
 
 #endif

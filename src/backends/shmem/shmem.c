@@ -16,6 +16,9 @@
  */
 
 #include "shmem.h"
+#include "node.h"
+#include "laik/space-internal.h"
+#include "laik/core-internal.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -490,6 +493,7 @@ int shmem_secondary_init(int primaryRank, int primarySize, int (*send)(int *, in
     }
     else
     {
+        created = true;
         // Master initialization
         openShmid = shmid;
 
@@ -505,19 +509,39 @@ int shmem_secondary_init(int primaryRank, int primarySize, int (*send)(int *, in
         if (shmdt(shmp) == -1)
             return SHMEM_SHMDT_FAILED;
     }
+    
 
     // Get the colours of each process at master, calculate the groups and send each process their group.
     if (primaryRank == 0)
     {
         groupInfo.colours = malloc(primarySize * sizeof(int));
-        groupInfo.colours[0] = groupInfo.colour;
+        groupInfo.colours[0] = 0;
         groupInfo.secondaryRanks = malloc(primarySize * sizeof(int));
         groupInfo.secondaryRanks[0] = groupInfo.rank;
 
+        int* tmpColours = malloc(primarySize * sizeof(int));
+
+        memset(tmpColours, -1, primarySize * sizeof(int));
+
+        int newColour = 0;
+        tmpColours[groupInfo.colour] = newColour++;
+        groupInfo.colour = 0;
+
         for (int i = 1; i < primarySize; i++)
-        {
-            (*recv)(&groupInfo.colours[i], 1, i);
+        {   
+            int colour;
+            (*recv)(&colour, 1, i);
+
+            if(tmpColours[colour] == -1)
+                tmpColours[colour] = newColour++;
+
+            (*send)(&tmpColours[colour], 1, i);
+
+            groupInfo.colours[i] = tmpColours[colour];
+
         }
+
+        free(tmpColours);
 
         int ii = 0;
         int groupSizes[primarySize];
@@ -560,6 +584,8 @@ int shmem_secondary_init(int primaryRank, int primarySize, int (*send)(int *, in
     {
         (*send)(&groupInfo.colour, 1, 0);
 
+        (*recv)(&groupInfo.colour, 1, 0);
+
         (*recv)(&groupInfo.rank, 1, 0);
         (*recv)(&groupInfo.size, 1, 0);
         groupInfo.colours = malloc(primarySize * sizeof(int));
@@ -574,7 +600,10 @@ int shmem_secondary_init(int primaryRank, int primarySize, int (*send)(int *, in
 
     if (created && shmctl(openShmid, IPC_RMID, 0) == -1)
         return SHMEM_SHMCTL_FAILED;
+    
     openShmid = -1;
+    
+    laik_log(2, "%d, %d", groupInfo.colour, groupInfo.rank);
 
     // Open the own meta info shm segment and set it to ready
     int err = createMetaInfoSeg();
@@ -688,6 +717,57 @@ void def_shmem_free(Laik_Data* d, void* ptr){
     if (shmctl(shmid, IPC_RMID, 0) == -1)
         laik_panic("def_shmem_free couldn't destroy the shared memory segment");
     
+}
+
+void transformSubGroup(Laik_Transition* t, int subgroup, groupTransform* group){
+    int primary = -1;
+    bool member = false;
+    int last = 0;
+    int ii = 0;
+
+    int processed[groupInfo.num_islands];
+    memset(processed, -1, groupInfo.num_islands * sizeof(int));
+
+    int tmp[groupInfo.size];
+
+    int count = laik_trans_groupCount(t , subgroup);
+
+    if(count == t->group->size)
+    {
+        t->subgroup[subgroup].count = groupInfo.num_islands;
+        memcpy(t->subgroup[subgroup].task, groupInfo.primarys, groupInfo.num_islands * sizeof(int));
+        return;
+    }
+
+    for(int i = 0; i < count; ++i)
+    {
+        int inTask = laik_trans_taskInGroup(t, subgroup, i);
+
+        if(processed[groupInfo.colours[inTask]] == -1)
+        {
+            t->subgroup[subgroup].task[last] = inTask;
+            ++last;
+            processed[groupInfo.colours[inTask]] = inTask;
+        }
+
+        if(groupInfo.colour == groupInfo.colours[inTask])
+        {
+            tmp[ii++] = groupInfo.secondaryRanks[inTask];
+
+            member |= groupInfo.rank == groupInfo.secondaryRanks[inTask];
+        }
+    }
+
+    primary = groupInfo.secondaryRanks[processed[groupInfo.colour]]; 
+
+    t->subgroup[subgroup].count = last; 
+
+    if(ii > 1) memcpy(&t->subgroup[subgroup].task[last], &tmp[1], (ii - 1) * sizeof(int));
+
+    group->primary = primary;
+    group->member = member;
+    group->sectionE = last + ii - 1;
+    group->sectionB = last;
 }
 
 int main(int argc, char **argv)

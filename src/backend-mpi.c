@@ -1183,7 +1183,7 @@ void laik_mpi_prepare(const Laik_Backend* this, Laik_ActionSeq* as)
     laik_log_ActionSeqIfChanged(changed, as, "After sorting for deadlock avoidance");
 
     
-
+    /*/
     if (mpi_async)
     {
         changed = laik_mpi_asyncSendRecv(as);
@@ -1192,6 +1192,7 @@ void laik_mpi_prepare(const Laik_Backend* this, Laik_ActionSeq* as)
         changed = laik_aseq_sort_rounds(as);
         laik_log_ActionSeqIfChanged(changed, as, "After sorting rounds 2");
     }
+    */
     laik_aseq_freeTempSpace(as);
 
     laik_aseq_calc_stats(as);

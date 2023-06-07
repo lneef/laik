@@ -293,6 +293,8 @@ int laik_trans_taskInGroup(Laik_Transition* t, int subgroup, int i);
 // true if a task is part of the group with ID <subgroup> in transition <t>
 bool laik_trans_isInGroup(Laik_Transition* t, int subgroup, int task);
 
+// return task ID in secondary backend in group with ID <subgroup> in transition <t>
+int laik_secondary_taskInGroup(Laik_Transition* t, int subgroup, int i, int section);
 
 // initialize the LAIK space module, called from laik_new_instance
 void laik_space_init(void);

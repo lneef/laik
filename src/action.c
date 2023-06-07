@@ -15,6 +15,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "laik/space-internal.h"
 #include <laik-internal.h>
 
 // for string.h to declare strdup
@@ -2358,14 +2359,19 @@ bool laik_aseq_replaceWithAllReduce(Laik_ActionSeq* as)
     Laik_Transition* t = tc->transition;
 
     Laik_Action* a = as->action;
+
+    int allSize = t->group->size;
     for(unsigned int i = 0; i < as->actionCount; i++, a = nextAction(a)) {
         Laik_BackendAction* ba = (Laik_BackendAction*) a;
 
         switch(a->type) {
         // TODO: LAIK_AT_MapGroupReduce
         case LAIK_AT_GroupReduce:
-            if (ba->inputGroup == -1) {
-                if (ba->outputGroup == -1) {
+        {
+            int inCount = laik_trans_groupCount(t, ba->inputGroup);
+            int outCount = laik_trans_groupCount(t, ba->outputGroup);
+            if (inCount == allSize) {
+                if (outCount == allSize) {
                     laik_aseq_addReduce(as, a->round, ba->fromBuf, ba->toBuf,
                                         ba->count, -1, ba->redOp);
                     changed = true;
@@ -2381,7 +2387,7 @@ bool laik_aseq_replaceWithAllReduce(Laik_ActionSeq* as)
             }
             laik_aseq_add(a, as, -1);
             break;
-
+        }
         default:
             laik_aseq_add(a, as, -1);
             break;
