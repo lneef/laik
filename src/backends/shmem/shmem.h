@@ -18,6 +18,7 @@
 #ifndef SHMEM_H
 #define SHMEM_H
 
+#include "laik/core.h"
 #include<stddef.h>
 #include<laik.h>
 
@@ -59,7 +60,7 @@ int shmem_recv(void *buffer, int count, int datatype, int sender, int *recieved)
 
 int shmem_error_string(int error, char *str);
 
-int shmem_secondary_init(int primaryRank, int primarySize, int (*send)(int *, int, int),
+int shmem_secondary_init(Laik_Instance* inst, int primaryRank, int primarySize, int (*send)(int *, int, int),
                          int (*recv)(int *, int, int));
 
 int shmem_get_colours(int **buf);

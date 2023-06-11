@@ -16,6 +16,7 @@
  */
 
 #include "shmem.h"
+#include "laik/core.h"
 #include "node.h"
 #include "laik/space-internal.h"
 #include "laik/core-internal.h"
@@ -54,6 +55,9 @@ struct groupInfo
     int *primarys;
     int *colours;
     int *secondaryRanks;
+
+    int(*send)(void*, int, int, int);
+    int (*recv)(void*, int, int, int, int*);
 };
 
 struct metaInfos{
@@ -238,7 +242,7 @@ int get_shmid(void *ptr, int *shmid, int *offset)
     return SHMEM_SEGMENT_NOT_FOUND;
 }
 
-int shmem_2cpy_send(const void *buffer, int count, int datatype, int recipient)
+int shmem_2cpy_send(void *buffer, int count, int datatype, int recipient)
 {
     int size = datatype * count;
     int shmAddr = hash(recipient + hash(groupInfo.rank)) + BUF_OFFSET;
@@ -328,7 +332,7 @@ int shmem_2cpy_recv(void *buffer, int count, int datatype, int sender, int *rece
     return SHMEM_SUCCESS;
 }
 
-int shmem_send(void *buffer, int count, int datatype, int recipient)
+int shmem_1cpy_send(void *buffer, int count, int datatype, int recipient)
 {
     (void) datatype;
 
@@ -356,7 +360,7 @@ int shmem_send(void *buffer, int count, int datatype, int recipient)
     return SHMEM_SUCCESS;
 }
 
-int shmem_recv(void *buffer, int count, int datatype, int sender, int *received)
+int shmem_1cpy_recv(void *buffer, int count, int datatype, int sender, int *received)
 {
     int shmAddr = hash(sender) + META_OFFSET;
     time_t t_0 = time(NULL);
@@ -409,6 +413,16 @@ int shmem_recv(void *buffer, int count, int datatype, int sender, int *received)
     return SHMEM_SUCCESS;
 }
 
+int shmem_send(void* buffer, int count, int datatype, int recipient)
+{
+    return groupInfo.send(buffer, count, datatype, recipient);
+}
+
+int shmem_recv(void *buffer, int count, int datatype, int sender, int *recieved)
+{
+    return groupInfo.recv(buffer, count, datatype, sender, recieved);
+}
+
 int shmem_error_string(int error, char *str)
 {
     switch (error)
@@ -456,10 +470,39 @@ int shmem_finalize()
     return SHMEM_SUCCESS;
 }
 
-int shmem_secondary_init(int primaryRank, int primarySize, int (*send)(int *, int, int),
+int shmem_secondary_init(Laik_Instance* inst, int primaryRank, int primarySize, int (*send)(int *, int, int),
                          int (*recv)(int *, int, int))
 {
     signal(SIGINT, deleteOpenShmSegs);
+
+    const char *envRanks = getenv("LAIK_RANKS_PER_ISLAND");
+    int numSubIslands = envRanks == NULL ? 1 : atoi(envRanks);
+
+    if(numSubIslands < 1)
+        laik_panic("RANKS_PER_ISLAND needs to be a number larger than 0");
+
+    int location = inst->world->locationid[primaryRank];
+    int shmKey = SHM_KEY - (location % numSubIslands);
+
+    const char *copyScheme = getenv("LAIK_SHMEM_COPY_SCHEME");
+
+    if(copyScheme != 0 && !strcmp(copyScheme, "2"))
+    {
+        groupInfo.send = shmem_2cpy_send;
+        groupInfo.recv = shmem_2cpy_recv;
+
+    }
+    else if(copyScheme == 0 || !strcmp(copyScheme, "1"))
+    {
+        groupInfo.send = shmem_1cpy_send;
+        groupInfo.recv = shmem_1cpy_recv;
+
+        laik_log(2, "one copy");
+    }
+    else 
+    {
+        laik_panic("Please provide a correct copy scheme: 1 or 2");
+    }
 
     bool created = false;
     struct shmInitSeg *shmp;
