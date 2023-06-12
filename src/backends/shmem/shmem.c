@@ -16,12 +16,14 @@
  */
 
 #include "shmem.h"
+#include "backends/tcp/errors.h"
 #include "laik/core.h"
 #include "node.h"
 #include "laik/space-internal.h"
 #include "laik/core-internal.h"
 
 #include <assert.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdbool.h>
@@ -82,6 +84,12 @@ struct groupInfo groupInfo;
 int openShmid = -1;
 int metaShmid = -1;
 
+static int pair(int colour, int rank)
+{
+    int tmp = (colour + rank) * (colour + rank + 1);
+    return tmp/2 + colour + 1;
+}
+
 int hash(int x)
 {
     x = ((x >> 16) ^ x) * 0x45d9f3b;
@@ -96,7 +104,9 @@ void deleteOpenShmSegs()
         shmctl(openShmid, IPC_RMID, 0);
 
     if (metaShmid != -1)
+    {   
         shmctl(metaShmid, IPC_RMID, 0);
+    }
 
     struct shmList *l = tail;
     while(l != NULL){
@@ -108,10 +118,12 @@ void deleteOpenShmSegs()
 
 int createMetaInfoSeg()
 {
-    int shmAddr = hash(groupInfo.rank) + META_OFFSET;
+    int shmAddr = hash(pair(groupInfo.colour, groupInfo.rank)) + META_OFFSET;
     metaShmid = shmget(shmAddr, sizeof(struct metaInfos), 0644 | IPC_CREAT);
     if (metaShmid == -1)
         return SHMEM_SHMGET_FAILED;
+    
+    laik_log(2, "%d", metaShmid);
 
     struct metaInfos *shmp = shmat(metaShmid, NULL, 0);
     if (shmp == (void *)-1)
@@ -121,7 +133,7 @@ int createMetaInfoSeg()
 
     if (shmdt(shmp) == -1)
         return SHMEM_SHMDT_FAILED;
-    
+
     return SHMEM_SUCCESS;
 }
 
@@ -244,8 +256,9 @@ int get_shmid(void *ptr, int *shmid, int *offset)
 
 int shmem_2cpy_send(void *buffer, int count, int datatype, int recipient)
 {
+    laik_log(2, "Two");
     int size = datatype * count;
-    int shmAddr = hash(recipient + hash(groupInfo.rank)) + BUF_OFFSET;
+    int shmAddr = hash(recipient + hash(pair(groupInfo.colour, groupInfo.rank))) + BUF_OFFSET;
     int bufShmid = shmget(shmAddr, size, 0644 | IPC_CREAT);
     if (bufShmid == -1)
         return SHMEM_SHMGET_FAILED;
@@ -283,7 +296,7 @@ int shmem_2cpy_send(void *buffer, int count, int datatype, int recipient)
 int shmem_2cpy_recv(void *buffer, int count, int datatype, int sender, int *received)
 {
     int bufSize = datatype * count;
-    int bufShmAddr = hash(groupInfo.rank + hash(sender)) + BUF_OFFSET;
+    int bufShmAddr = hash(groupInfo.rank + hash(pair(groupInfo.colour, sender))) + BUF_OFFSET;
 
     time_t t_0 = time(NULL);
     int bufShmid = shmget(bufShmAddr, 0, 0644);
@@ -296,7 +309,7 @@ int shmem_2cpy_recv(void *buffer, int count, int datatype, int sender, int *rece
     if (bufShmp == (void *)-1)
         return SHMEM_SHMAT_FAILED;
 
-    int shmAddr = hash(sender) + META_OFFSET;
+    int shmAddr = hash(pair(groupInfo.colour, sender)) + META_OFFSET;
     int shmid = shmget(shmAddr, 0, 0644);
     if (shmid == -1)
         return SHMEM_SHMGET_FAILED;
@@ -362,7 +375,8 @@ int shmem_1cpy_send(void *buffer, int count, int datatype, int recipient)
 
 int shmem_1cpy_recv(void *buffer, int count, int datatype, int sender, int *received)
 {
-    int shmAddr = hash(sender) + META_OFFSET;
+    int shmAddr = hash(pair(groupInfo.colour, sender)) + META_OFFSET;
+    laik_log(2, "%d", shmAddr);
     time_t t_0 = time(NULL);
     int shmid = shmget(shmAddr, 0, 0644);
     while (shmid == -1 && time(NULL) - t_0 < MAX_WAITTIME)
@@ -374,6 +388,7 @@ int shmem_1cpy_recv(void *buffer, int count, int datatype, int sender, int *rece
     struct metaInfos *shmp = shmat(shmid, NULL, 0);
     if (shmp == (void *)-1)
         return SHMEM_SHMAT_FAILED;
+    laik_log(2, "%d", shmid);
 
     while (shmp->receiver != groupInfo.rank)
     {
@@ -475,14 +490,14 @@ int shmem_secondary_init(Laik_Instance* inst, int primaryRank, int primarySize, 
 {
     signal(SIGINT, deleteOpenShmSegs);
 
-    const char *envRanks = getenv("LAIK_RANKS_PER_ISLAND");
+    const char *envRanks = getenv("LAIK_SHMEM_SUB_ISLANDS");
     int numSubIslands = envRanks == NULL ? 1 : atoi(envRanks);
 
     if(numSubIslands < 1)
         laik_panic("RANKS_PER_ISLAND needs to be a number larger than 0");
 
     int location = inst->world->locationid[primaryRank];
-    int shmKey = SHM_KEY - (location % numSubIslands);
+    int shmAddr = SHM_KEY + (location % numSubIslands);
 
     const char *copyScheme = getenv("LAIK_SHMEM_COPY_SCHEME");
 
@@ -506,7 +521,7 @@ int shmem_secondary_init(Laik_Instance* inst, int primaryRank, int primarySize, 
 
     bool created = false;
     struct shmInitSeg *shmp;
-    int shmid = shmget(SHM_KEY, sizeof(struct shmInitSeg), IPC_EXCL | 0644 | IPC_CREAT);
+    int shmid = shmget(shmAddr, sizeof(struct shmInitSeg), IPC_EXCL | 0644 | IPC_CREAT);
     if (shmid == -1)
     {
         // Client initialization
@@ -516,7 +531,7 @@ int shmem_secondary_init(Laik_Instance* inst, int primaryRank, int primarySize, 
         t_0 = time(NULL);
         while (time(NULL) - t_0 < MAX_WAITTIME && shmid == -1)
         {
-            shmid = shmget(SHM_KEY, 0, IPC_CREAT | 0644);
+            shmid = shmget(shmAddr, 0, IPC_CREAT | 0644);
         }
         if (shmid == -1)
             return SHMEM_SHMGET_FAILED;
@@ -632,9 +647,9 @@ int shmem_secondary_init(Laik_Instance* inst, int primaryRank, int primarySize, 
         (*recv)(&groupInfo.rank, 1, 0);
         (*recv)(&groupInfo.size, 1, 0);
         groupInfo.colours = malloc(primarySize * sizeof(int));
-        (*recv)(groupInfo.colours, groupInfo.size, 0);
+        (*recv)(groupInfo.colours, primarySize, 0);
         groupInfo.secondaryRanks = malloc(primarySize * sizeof(int));
-        (*recv)(groupInfo.secondaryRanks, groupInfo.size, 0);
+        (*recv)(groupInfo.secondaryRanks, primarySize, 0);
 
         (*recv)(&groupInfo.num_islands, 1, 0);
         groupInfo.primarys = malloc(groupInfo.num_islands * sizeof(int));
@@ -645,14 +660,15 @@ int shmem_secondary_init(Laik_Instance* inst, int primaryRank, int primarySize, 
         return SHMEM_SHMCTL_FAILED;
     
     openShmid = -1;
+    pid_t my = getpid();
+    laik_log(2, "%d, %d, %d", groupInfo.rank, groupInfo.size, my);
     
-    laik_log(2, "%d, %d", groupInfo.colour, groupInfo.rank);
-
     // Open the own meta info shm segment and set it to ready
     int err = createMetaInfoSeg();
     if (err != SHMEM_SUCCESS)
         return err;
 
+    laik_log(2, "%d", metaShmid);
     return SHMEM_SUCCESS;
 }
 
@@ -723,13 +739,12 @@ int get_shmid_and_destroy(void *ptr, int *shmid)
 static int cnt = 0;
 
 void* def_shmem_malloc(Laik_Data* d, size_t size){
+    
     (void) d; // not used in this implementation of interface
-
-    int shmAddr = hash(groupInfo.rank + hash(cnt++)) + ALLOC_OFFSET;
-    int shmid = shmget(shmAddr, size, 0644 | IPC_CREAT | IPC_EXCL);
+    int shmid = shmget(IPC_PRIVATE, size, 0644 | IPC_CREAT | IPC_EXCL);
     if (shmid == -1)
-    {
-        laik_panic("def_shmem_malloc couldn't create the shared memory segment");
+    {   
+        laik_panic("def_shmem_malloc couldn't create the shared memory segment: shmid == -1");
         return NULL;
     }
     
@@ -775,6 +790,7 @@ void transformSubGroup(Laik_Transition* t, int subgroup, groupTransform* group, 
 
     int count = laik_trans_groupCount(t , subgroup);
 
+
     if(count == t->group->size)
     {   
         laik_secondary_updateGroup(t, subgroup, 0, groupInfo.primarys, groupInfo.num_islands, -1);
@@ -800,9 +816,11 @@ void transformSubGroup(Laik_Transition* t, int subgroup, groupTransform* group, 
         }
     }
 
-    primary = groupInfo.secondaryRanks[processed[groupInfo.colour]]; 
-
-    laik_secondary_updateGroup(t, subgroup, last, &tmp[1], ii - 1, chain_idx);
+    if(ii > 0)
+    {
+        primary = groupInfo.secondaryRanks[processed[groupInfo.colour]]; 
+        laik_secondary_updateGroup(t, subgroup, last, &tmp[1], ii - 1, chain_idx);
+    }
 
     group->primary = primary;
     group->member = member;

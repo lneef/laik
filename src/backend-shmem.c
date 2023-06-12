@@ -608,17 +608,22 @@ static void laik_shmem_exec_Reduce(Laik_Action* a, Laik_TransitionContext* tc)
     unsigned off = ba -> count * data -> elemsize;
     int received;
 
-    for(int i = 0; i < ba->size; ++i)
+    unsigned currentOff = off;
+
+    for(int i = 1; i < ba->size; ++i)
     {   
-            if(i == ba -> rank) continue;
-            shmem_recv(ba->buf + off, ba->count, getSHMEMDataType(data), i, &received);
-            off += ba -> count * data -> elemsize;
+        shmem_recv(ba->buf + currentOff, ba->count, getSHMEMDataType(data), i, &received);
+        currentOff += off;
     }
+
+    currentOff = off;
 
     for(int i = 1; i < ba -> size; ++i)
     {
-        data -> type -> reduce(ba->buf, ba->buf, ba->buf + i * data -> elemsize * ba->count, ba->count, ba->redOp);
+        data -> type -> reduce(ba->buf, ba->buf, ba->buf + currentOff, ba->count, ba->redOp);
+        currentOff += off;
     }
+
 
 }
 
@@ -1116,6 +1121,7 @@ static void replace_reduce(Laik_ActionSeq *as, Laik_Action* a)
 
     Laik_TransitionContext *tc = as->context[0];
     Laik_Data* data = tc -> data;
+    Laik_Transition* t = tc->transition;
     unsigned int bufSize = size * data -> elemsize * ba->count;
 
     char* reducebuf = NULL;
@@ -1137,7 +1143,7 @@ static void replace_reduce(Laik_ActionSeq *as, Laik_Action* a)
 
     ++rd;
 
-    if(rank == 0 || rank == master)
+    if(rank == 0 ||  t->group->myid == master)
         laik_aseq_addGroupReduce(as, rd, ba->inputGroup, ba->outputGroup, reducebuf, ba->toBuf, ba->count, ba -> redOp);
 
     ++rd;
@@ -1182,6 +1188,7 @@ static void replace_groupReduce(Laik_ActionSeq* as, Laik_Action* a, groupTransfo
     groupTransform* output = &subgroupInfo[ba->outputGroup];
 
     int islandGroupSize = input->sectionE - input->sectionB + 1;
+    laik_log(2, "%d, %d", islandGroupSize, input->primary);
     int bufSize = islandGroupSize * ba -> count * data -> elemsize;
     char* reduceBuf;
 
@@ -1247,6 +1254,8 @@ bool laik_shmem_replace_secondary(const Laik_Backend* primary, Laik_ActionSeq *a
     Laik_TransitionContext* tc = as->context[0];
     Laik_Transition* t = tc->transition;
 
+    int pRank = t->group->myid;
+
     const int chain_idx = laik_secondary_shmem.chain_index;
     int groupCount = t -> subgroupCount;
 
@@ -1268,8 +1277,8 @@ bool laik_shmem_replace_secondary(const Laik_Backend* primary, Laik_ActionSeq *a
         case LAIK_AT_MapSend:
         {
             Laik_BackendAction *ba = (Laik_BackendAction *)a;
-            if(colours[rank] == colours[ba->rank]){
-                ba = (Laik_BackendAction*) laik_aseq_addr(a, as, 3 * a->round + 2, chain_idx);
+            if(colours[pRank] == colours[ba->rank]){
+                ba = (Laik_BackendAction*) laik_aseq_addr(a, as, 3 * a->round, chain_idx);
                 ba->rank = secondaryRanks[ba->rank];
                 ba->h.type = LAIK_AT_ShmemMapSend;
                 ret = true;
@@ -1291,7 +1300,7 @@ bool laik_shmem_replace_secondary(const Laik_Backend* primary, Laik_ActionSeq *a
         case LAIK_AT_BufSend:
         {
             Laik_A_BufSend *aa = (Laik_A_BufSend *)a;
-            if(colours[rank] == colours[aa->to_rank]){
+            if(colours[pRank] == colours[aa->to_rank]){
                 aa = (Laik_A_BufSend*) laik_aseq_addr(a, as, 3 * a->round, chain_idx);
                 aa->to_rank = secondaryRanks[aa->to_rank];
                 aa->h.type = LAIK_AT_ShmemBufSend;
@@ -1302,7 +1311,7 @@ bool laik_shmem_replace_secondary(const Laik_Backend* primary, Laik_ActionSeq *a
         case LAIK_AT_MapRecv:
         {
             Laik_BackendAction *ba = (Laik_BackendAction *)a;
-            if(colours[rank] == colours[ba->rank]){
+            if(colours[pRank] == colours[ba->rank]){
                 ba = (Laik_BackendAction*) laik_aseq_addr(a, as, 3 * a->round, chain_idx);
                 ba->rank = secondaryRanks[ba->rank];
                 ba->h.type = LAIK_AT_ShmemMapRecv;
@@ -1313,7 +1322,9 @@ bool laik_shmem_replace_secondary(const Laik_Backend* primary, Laik_ActionSeq *a
         case LAIK_AT_BufRecv:
         {
             Laik_A_BufRecv *aa = (Laik_A_BufRecv *)a;
-            if(colours[rank] == colours[aa->from_rank]){
+            if(colours[pRank] == colours[aa->from_rank]){
+                laik_log(2, "%d, %d", rank, aa->from_rank);
+
                 aa = (Laik_A_BufRecv*) laik_aseq_addr(a, as, 3 * a->round, chain_idx);
                 aa->from_rank = secondaryRanks[aa->from_rank];
                 aa->h.type = LAIK_AT_ShmemBufRecv;
@@ -1324,7 +1335,7 @@ bool laik_shmem_replace_secondary(const Laik_Backend* primary, Laik_ActionSeq *a
         case LAIK_AT_MapPackAndSend:
         {
             Laik_A_MapPackAndSend *aa = (Laik_A_MapPackAndSend *)a;
-            if(colours[rank] == colours[aa->to_rank]){
+            if(colours[pRank] == colours[aa->to_rank]){
                 aa = (Laik_A_MapPackAndSend*) laik_aseq_addr(a, as, 3 * a->round, chain_idx);
                 aa->to_rank = secondaryRanks[aa->to_rank];
                 aa->h.type = LAIK_AT_ShmemMapPackAndSend;
@@ -1335,7 +1346,7 @@ bool laik_shmem_replace_secondary(const Laik_Backend* primary, Laik_ActionSeq *a
         case LAIK_AT_PackAndSend:
         {
             Laik_BackendAction *ba = (Laik_BackendAction *)a;
-            if(colours[rank] == colours[ba->rank]){
+            if(colours[pRank] == colours[ba->rank]){
                 ba = (Laik_BackendAction*) laik_aseq_addr(a, as, 3 * a->round, chain_idx);
                 ba->rank = secondaryRanks[ba->rank];
                 ba->h.type = LAIK_AT_ShmemPackAndSend;
@@ -1346,7 +1357,7 @@ bool laik_shmem_replace_secondary(const Laik_Backend* primary, Laik_ActionSeq *a
         case LAIK_AT_MapRecvAndUnpack:
         {
             Laik_A_MapRecvAndUnpack *aa = (Laik_A_MapRecvAndUnpack *)a;
-            if(colours[rank] == colours[aa->from_rank]){
+            if(colours[pRank] == colours[aa->from_rank]){
                 aa = (Laik_A_MapRecvAndUnpack*) laik_aseq_addr(a, as, 3 * a->round, chain_idx);
                 aa->from_rank = secondaryRanks[aa->from_rank];
                 aa->h.type = LAIK_AT_ShmemMapRecvAndUnpack;
@@ -1357,7 +1368,7 @@ bool laik_shmem_replace_secondary(const Laik_Backend* primary, Laik_ActionSeq *a
         case LAIK_AT_RecvAndUnpack:
         {
             Laik_BackendAction *ba = (Laik_BackendAction *)a;
-            if(colours[rank] == colours[ba->rank]){
+            if(colours[pRank] == colours[ba->rank]){
                 ba = (Laik_BackendAction*) laik_aseq_addr(a, as, 3 * a->round, chain_idx);
                 ba->rank = secondaryRanks[ba->rank];
                 ba->h.type = LAIK_AT_ShmemRecvAndUnpack;
