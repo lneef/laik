@@ -23,6 +23,7 @@
 #include <laik.h>     // for Laik_Index, Laik_Partitioning
 #include <stdbool.h>  // for bool
 #include <stdint.h>   // for int64_t
+#include "definitions.h" // for MAX_SECONDARIES
 
 void laik_add_index(Laik_Index* res, Laik_Index* src1, Laik_Index* src2);
 void laik_sub_index(Laik_Index* res, const Laik_Index* src1, const Laik_Index* src2);
@@ -222,8 +223,7 @@ struct recvTOp {
 
 // referenced in reduction operation within a transition
 typedef struct _TaskGroup {
-    //at most 3 secondaries
-    int count[4];
+    int count[MAX_SECONDARIES + 1];
     int* task; // sorted list
 } TaskGroup;
 
@@ -299,10 +299,13 @@ bool laik_trans_isInGroup(Laik_Transition* t, int subgroup, int task);
 int laik_secondary_taskInGroup(Laik_Transition* t, int subgroup, int i, int chain_idx);
 
 // update task group by replacing some tasks with secondary specific task IDs
-void laik_secondary_updateGroup(Laik_Transition* t, int subgroup, int count, int* myranks, int myrankNum, int chain_idx);
+void laik_secondary_addSubGroup(Laik_Transition* t, int subgroup, int count, int* myranks, int myrankNum, int chain_idx);
 
 // update task ID at position <i>
 void laik_secondary_updateTask(Laik_Transition* t, int subgroup, int id, int task);
+
+//update length subset <chain_idx> of subgroup <subgroup>
+void laik_secondary_updateGroupCount(Laik_Transition* t, int subgroup, int count, int chain_idx);
 
 // initialize the LAIK space module, called from laik_new_instance
 void laik_space_init(void);

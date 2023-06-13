@@ -24,6 +24,7 @@
 #define MAX_DATAS         1000
 #define MAX_MAPPINGS      10
 #define MAX_AGENTS        10
+#define MAX_SECONDARIES    3
 #define MAX_FILENAME_LENGTH 128
 
 #endif // LAIK_DEFINITIONS_H

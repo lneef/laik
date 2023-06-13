@@ -1188,7 +1188,6 @@ static void replace_groupReduce(Laik_ActionSeq* as, Laik_Action* a, groupTransfo
     groupTransform* output = &subgroupInfo[ba->outputGroup];
 
     int islandGroupSize = input->sectionE - input->sectionB + 1;
-    laik_log(2, "%d, %d", islandGroupSize, input->primary);
     int bufSize = islandGroupSize * ba -> count * data -> elemsize;
     char* reduceBuf;
 

@@ -26,6 +26,7 @@
 
 #include <laik.h>     // for Laik_Transition, Laik_Data, Laik_Instance, Laik...
 #include <stdbool.h>  // for bool
+#include "definitions.h" // for maximal number of secondaries
 
 
 // LAIK communication back-end
@@ -86,7 +87,6 @@ struct _Laik_Backend {
   // resize is finished. They can be marked as dead and resources freed
   void (*finish_resize)(const Laik_Backend*);
   
-#define MAX_SECONDARIES 3
   Laik_Secondary* chain[MAX_SECONDARIES];
 
   unsigned char chain_length;

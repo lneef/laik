@@ -16,6 +16,8 @@
  */
 
 #include "laik-internal.h"
+#include "laik/space-internal.h"
+#include "laik/space.h"
 
 // for string.h to declare strdup
 #define __STDC_WANT_LIB_EXT2__ 1
@@ -1699,6 +1701,8 @@ bool laik_trans_isInGroup(Laik_Transition* t, int subgroup, int task)
     return false;
 }
 
+
+
 int laik_secondary_taskInGroup(Laik_Transition* t, int subgroup, int i, int chain_idx){
     assert(i < t->subgroup[subgroup].count[chain_idx + 1]);
     assert(subgroup < t->subgroupCount);
@@ -1706,18 +1710,23 @@ int laik_secondary_taskInGroup(Laik_Transition* t, int subgroup, int i, int chai
     return t -> subgroup[subgroup].task[i];
 }
 
-void laik_secondary_updateGroup(Laik_Transition* t, int subgroup, int count, int* myranks, int myrankNum, int chain_idx){
+// shit, update
+void laik_secondary_updateGroupCount(Laik_Transition* t, int subgroup, int count, int chain_idx)
+{
+    t->subgroup[subgroup].count[chain_idx + 1] = count;
+}
 
-    //count == 0 cannot happen unless all primaries are replaced
-    t->subgroup[subgroup].count[0] = count; 
+void laik_secondary_addSubGroup(Laik_Transition* t, int subgroup, int count, int* myranks, int myrankNum, int chain_idx){
 
-    if(myrankNum > 0) memcpy(&t->subgroup[subgroup].task[count], myranks, (myrankNum) * sizeof(int));
+    memcpy(&t->subgroup[subgroup].task[count], myranks, myrankNum * sizeof(int));
 
     t->subgroup[subgroup].count[chain_idx + 1] = count + myrankNum; 
 
 }
 
+
 void laik_secondary_updateTask(Laik_Transition* t, int subgroup, int id, int task){
+
     t->subgroup[subgroup].task[id] = task;
 }
 

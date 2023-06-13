@@ -660,8 +660,6 @@ int shmem_secondary_init(Laik_Instance* inst, int primaryRank, int primarySize, 
         return SHMEM_SHMCTL_FAILED;
     
     openShmid = -1;
-    pid_t my = getpid();
-    laik_log(2, "%d, %d, %d", groupInfo.rank, groupInfo.size, my);
     
     // Open the own meta info shm segment and set it to ready
     int err = createMetaInfoSeg();
@@ -793,7 +791,8 @@ void transformSubGroup(Laik_Transition* t, int subgroup, groupTransform* group, 
 
     if(count == t->group->size)
     {   
-        laik_secondary_updateGroup(t, subgroup, 0, groupInfo.primarys, groupInfo.num_islands, -1);
+        laik_secondary_updateGroupCount(t, subgroup, 0, -1);
+        laik_secondary_addSubGroup(t, subgroup, 0, groupInfo.primarys, groupInfo.num_islands, -1);
         return;
     }
 
@@ -816,11 +815,12 @@ void transformSubGroup(Laik_Transition* t, int subgroup, groupTransform* group, 
         }
     }
 
-    if(ii > 0)
-    {
-        primary = groupInfo.secondaryRanks[processed[groupInfo.colour]]; 
-        laik_secondary_updateGroup(t, subgroup, last, &tmp[1], ii - 1, chain_idx);
-    }
+    laik_secondary_updateGroupCount(t, subgroup, last, -1);
+
+    if(ii > 0) primary = groupInfo.secondaryRanks[processed[groupInfo.colour]];
+
+    if(ii > 1) laik_secondary_addSubGroup(t, subgroup, last, &tmp[1], ii - 1, chain_idx);
+
 
     group->primary = primary;
     group->member = member;
