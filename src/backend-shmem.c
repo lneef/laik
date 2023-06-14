@@ -627,6 +627,41 @@ static void laik_shmem_exec_Reduce(Laik_Action* a, Laik_TransitionContext* tc)
 
 }
 
+/*
+static void laik_shmem_exec_Reduce(Laik_Action* a, Laik_TransitionContext* tc)
+{
+    Laik_A_ShmemReduce* ba = (Laik_A_ShmemReduce*) a;
+    Laik_Data* data = tc -> data;
+
+    int rank;
+    shmem_comm_rank(&rank);
+
+    memcpy(ba->buf, ba->frombuf, ba->count * data->elemsize);
+
+    unsigned off = ba -> count * data -> elemsize;
+    int received, collector, sender;
+
+    collector = 2;
+    sender = 1;
+
+    while(sender < ba->size && rank % sender == 0)
+    {
+        if(rank % collector > 0)
+        {
+           shmem_send(ba->buf, ba->count, getSHMEMDataType(data), rank - sender);
+        }
+        else if(rank + sender < ba->size)
+        {
+            shmem_recv(ba->buf + off, ba->count, getSHMEMDataType(data), rank + sender, &received);
+            data -> type -> reduce(ba->buf, ba->buf, ba->buf + off, ba->count, ba->redOp);
+        }
+
+        sender <<= 1;
+        collector <<= 1;
+    }
+}
+*/
+
 static void laik_shmem_exec_CopyToBuf(Laik_Action* a, Laik_TransitionContext* tc)
 {
     Laik_A_ShmemCopyToBuf* ba = (Laik_A_ShmemCopyToBuf*) a;
@@ -1113,11 +1148,13 @@ static void replace_reduce(Laik_ActionSeq *as, Laik_Action* a)
     int master = ba -> rank;
 
     unsigned char rd = 3 * a -> round;
-    int size, rank;
+    int size, rank, numIslands;
+    int* secondaryRanks;
     
     shmem_comm_rank(&rank);
     shmem_comm_size(&size);
-
+    shmem_get_island_num(&numIslands);
+    shmem_get_primarys(&secondaryRanks);
 
     Laik_TransitionContext *tc = as->context[0];
     Laik_Data* data = tc -> data;
@@ -1144,8 +1181,12 @@ static void replace_reduce(Laik_ActionSeq *as, Laik_Action* a)
     ++rd;
 
     if(rank == 0 ||  t->group->myid == master)
-        laik_aseq_addGroupReduce(as, rd, ba->inputGroup, ba->outputGroup, reducebuf, ba->toBuf, ba->count, ba -> redOp);
-
+    {   
+        if(numIslands == 1)
+            laik_shmem_addShmemCopyToBuf(as, rd, reducebuf, ba->toBuf, ba->count, 0, master == -1 ? 0 : secondaryRanks[master]);
+        else
+            laik_aseq_addGroupReduce(as, rd, ba->inputGroup, ba->outputGroup, reducebuf, ba->toBuf, ba->count, ba -> redOp);
+    }
     ++rd;
 
     if(master == -1)
@@ -1395,7 +1436,6 @@ bool laik_shmem_replace_secondary(const Laik_Backend* primary, Laik_ActionSeq *a
 bool laik_shmem_secondary_exec(const Laik_Backend* primary, Laik_ActionSeq *as, Laik_Action *a)
 {   
     (void) primary;
-    // TODO: use transition context given by each action
     Laik_TransitionContext *tc = as->context[0];
     Laik_MappingList *fromList = tc->fromList;
     Laik_MappingList *toList = tc->toList;
