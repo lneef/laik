@@ -18,6 +18,7 @@
 #ifndef SHMEM_H
 #define SHMEM_H
 
+#include "laik/action.h"
 #include "laik/core.h"
 #include<stddef.h>
 #include<laik.h>
@@ -32,14 +33,6 @@
 #define SHMEM_SEGMENT_NOT_FOUND 6
 
 #define SHMEM_MAX_ERROR_STRING 100
-
-typedef struct
-{
-    int primary;
-    int sectionB;
-    int sectionE;
-    bool member;
-} groupTransform;
 
 
 int shmem_init();
@@ -73,10 +66,8 @@ int shmem_get_secondaryRanks(int **buf);
 
 int shmem_finalize();
 
-void* def_shmem_malloc(Laik_Data* d, size_t size);
+bool onSameIsland(Laik_ActionSeq* as, int inputgroup, int outputgroup, int chain_idx);
 
-void def_shmem_free(Laik_Data* d, void* ptr);
-
-void transformSubGroup(Laik_Transition* t, int subgroup, groupTransform* subgroups, int chain_idx);
+void shmem_transformSubGroup(Laik_Transition* t, Laik_ActionSeq* as,  int chain_idx);
 
 #endif

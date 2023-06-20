@@ -15,10 +15,12 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
+#include "laik/core.h"
 # ifdef USE_MPI
 #include "laik-internal.h"
 #include "laik-backend-mpi.h"
 
+#include <laik.h>
 #include <assert.h>
 #include <stdlib.h>
 #include <mpi.h>
@@ -643,7 +645,7 @@ static void laik_mpi_exec_reduce(Laik_TransitionContext *tc, Laik_BackendAction 
 // send their data to him, he does the reduction, and sends to all processes
 // interested in the result
 static void laik_mpi_exec_groupReduce(Laik_TransitionContext *tc,
-                                      Laik_BackendAction *a,
+                                      Laik_BackendAction *a, Laik_ActionSeq* as,
                                       MPI_Datatype dataType, MPI_Comm comm)
 {
     assert(a->h.type == LAIK_AT_GroupReduce);
@@ -651,7 +653,7 @@ static void laik_mpi_exec_groupReduce(Laik_TransitionContext *tc,
     Laik_Data *data = tc->data;
 
     // do the manual reduction on smallest rank of output group
-    int reduceTask = laik_trans_taskInGroup(t, a->outputGroup, 0);
+    int reduceTask = laik_aseq_taskInGroup(as, a->outputGroup, 0, -1);
     laik_log(1, "      exec reduce at T%d", reduceTask);
 
     int myid = t->group->myid;
@@ -662,7 +664,7 @@ static void laik_mpi_exec_groupReduce(Laik_TransitionContext *tc,
     {
         // not the reduce task: eventually send input and recv result
 
-        if (laik_trans_isInGroup(t, a->inputGroup, myid))
+        if (laik_aseq_isInGroup(as, a->inputGroup, myid, -1))
         {
             laik_log(1, "        exec MPI_Send to T%d", reduceTask);
             err = MPI_Send(a->fromBuf, (int)a->count, dataType,
@@ -670,7 +672,7 @@ static void laik_mpi_exec_groupReduce(Laik_TransitionContext *tc,
             if (err != MPI_SUCCESS)
                 laik_mpi_panic(err);
         }
-        if (laik_trans_isInGroup(t, a->outputGroup, myid))
+        if (laik_aseq_isInGroup(as, a->outputGroup, myid, -1))
         {
             laik_log(1, "        exec MPI_Recv from T%d", reduceTask);
             err = MPI_Recv(a->toBuf, (int)a->count, dataType,
@@ -687,9 +689,9 @@ static void laik_mpi_exec_groupReduce(Laik_TransitionContext *tc,
     }
 
     // we are the reduce task
-    int inCount = laik_trans_groupCount(t, a->inputGroup);
+    int inCount = laik_aseq_groupCount(as, a->inputGroup, -1);
     uint64_t byteCount = a->count * data->elemsize;
-    bool inputFromMe = laik_trans_isInGroup(t, a->inputGroup, myid);
+    bool inputFromMe = laik_aseq_isInGroup(as, a->inputGroup, myid, -1);
 
     // for direct execution: use global <packbuf> (size PACKBUFSIZE)
     // check that bufsize is enough. TODO: dynamically increase?
@@ -711,7 +713,7 @@ static void laik_mpi_exec_groupReduce(Laik_TransitionContext *tc,
     }
     for (int i = 0; i < inCount; i++)
     {
-        int inTask = laik_trans_taskInGroup(t, a->inputGroup, i);
+        int inTask = laik_aseq_taskInGroup(as, a->inputGroup, i, -1);
         if (inTask == myid)
             continue;
 
@@ -755,10 +757,10 @@ static void laik_mpi_exec_groupReduce(Laik_TransitionContext *tc,
     }
 
     // send result to tasks in output group
-    int outCount = laik_trans_groupCount(t, a->outputGroup);
+    int outCount = laik_aseq_groupCount(as, a->outputGroup, -1);
     for (int i = 0; i < outCount; i++)
     {
-        int outTask = laik_trans_taskInGroup(t, a->outputGroup, i);
+        int outTask = laik_aseq_taskInGroup(as, a->outputGroup, i, -1);
         if (outTask == myid)
         {
             // that's myself: nothing to do
@@ -1053,7 +1055,7 @@ void laik_mpi_exec(const Laik_Backend* this, Laik_ActionSeq* as)
             break;
 
         case LAIK_AT_GroupReduce:
-            laik_mpi_exec_groupReduce(tc, ba, dataType, comm);
+            laik_mpi_exec_groupReduce(tc, ba, as, dataType, comm);
             break;
 
         case LAIK_AT_RBufLocalReduce:
@@ -1132,6 +1134,9 @@ void laik_mpi_prepare(const Laik_Backend* this, Laik_ActionSeq* as)
     // mark as prepared by MPI backend: for MPI-specific cleanup + action logging
     as->backend = &laik_backend_mpi;
 
+    laik_trans_movetoAS(as);
+
+
     bool changed = laik_aseq_splitTransitionExecs(as);
     laik_log_ActionSeqIfChanged(changed, as, "After splitting transition execs");
     if (as->actionCount == 0)
@@ -1150,11 +1155,12 @@ void laik_mpi_prepare(const Laik_Backend* this, Laik_ActionSeq* as)
         changed = laik_aseq_replaceWithAllReduce(as);
         laik_log_ActionSeqIfChanged(changed, as, "After all-reduce detection");
     }
+    
     changed = laik_aseq_sort_2phases(as);
     // changed = laik_aseq_sort_rankdigits(as);
     laik_log_ActionSeqIfChanged(changed, as, "After sorting for deadlock avoidance");
 
-    changed = this->chain[0]->laik_replace_secondary(this, as);
+    changed = this->chain[0]->laik_secondary_prepare(this, as);
     laik_log_ActionSeqIfChanged(changed, as, "After replacing with shmem calls");
 
     changed = laik_aseq_combineActions(as);
@@ -1183,7 +1189,6 @@ void laik_mpi_prepare(const Laik_Backend* this, Laik_ActionSeq* as)
     laik_log_ActionSeqIfChanged(changed, as, "After sorting for deadlock avoidance");
 
     
-    /*/
     if (mpi_async)
     {
         changed = laik_mpi_asyncSendRecv(as);
@@ -1192,7 +1197,6 @@ void laik_mpi_prepare(const Laik_Backend* this, Laik_ActionSeq* as)
         changed = laik_aseq_sort_rounds(as);
         laik_log_ActionSeqIfChanged(changed, as, "After sorting rounds 2");
     }
-    */
     laik_aseq_freeTempSpace(as);
 
     laik_aseq_calc_stats(as);
@@ -1216,6 +1220,9 @@ static void laik_mpi_cleanup(const Laik_Backend* this, Laik_ActionSeq* as)
         free(aa->req);
         laik_log(1, "  freed MPI_Request array with %d entries", aa->count);
     }
+
+    laik_aseq_removefromAS(as);
+
 }
 
 //----------------------------------------------------------------------------

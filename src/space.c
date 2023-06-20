@@ -16,6 +16,8 @@
  */
 
 #include "laik-internal.h"
+#include "laik/action.h"
+#include "laik/definitions.h"
 #include "laik/space-internal.h"
 #include "laik/space.h"
 
@@ -715,7 +717,7 @@ static TaskGroup* newTaskGroup(int* group)
     if (group) *group = groupListCount;
     groupListCount++;
 
-    g->count[0] = 0; // invalid
+    g->count = 0; // invalid
     g->task = 0;
 
     return g;
@@ -725,13 +727,13 @@ static int getTaskGroupSingle(int task)
 {
     // already existing?
     for(int i = 0; i < groupListCount; i++)
-        if ((groupList[i].count[0] == 1) && (groupList[i].task[0] == task))
+        if ((groupList[i].count == 1) && (groupList[i].task[0] == task))
             return i;
 
     int group;
     TaskGroup* g = newTaskGroup(&group);
 
-    g->count[0] = 1;
+    g->count = 1;
     g->task = malloc(sizeof(int));
     assert(g->task);
     g->task[0] = task;
@@ -746,17 +748,17 @@ static int getTaskGroup(TaskGroup* tg)
     int i, j;
     for(i = 0; i < groupListCount; i++) {
         if (tg->count != groupList[i].count) continue;
-        for(j = 0; j < tg->count[0]; j++)
+        for(j = 0; j < tg->count; j++)
             if (tg->task[j] != groupList[i].task[j]) break;
-        if (j == tg->count[0])
+        if (j == tg->count)
             return i; // found
     }
 
     int group;
     TaskGroup* g = newTaskGroup(&group);
 
-    g->count[0] = tg->count[0];
-    int tsize = tg->count[0] * sizeof(int);
+    g->count = tg->count;
+    int tsize = tg->count * sizeof(int);
     g->task = malloc(tsize);
     assert(g->task);
     memcpy(g->task, tg->task, tsize);
@@ -837,44 +839,44 @@ static int rb_cmp(const void *p1, const void *p2)
 static bool addTask(TaskGroup* g, int task, int maxTasks)
 {
     int o = 0;
-    while(o < g->count[0]) {
+    while(o < g->count) {
         if (task < g->task[o]) break;
         if (task == g->task[o]) return false; // already in group
         o++;
     }
-    while(o < g->count[0]) {
+    while(o < g->count) {
         int tmp = g->task[o];
         g->task[o] = task;
         task = tmp;
         o++;
     }
-    assert(g->count[0] < maxTasks);
+    assert(g->count < maxTasks);
     g->task[o] = task;
-    g->count[0]++;
+    g->count++;
     return true;
 }
 
 static bool removeTask(TaskGroup* g, int task)
 {
-    if (g->count[0] == 0) return false;
+    if (g->count == 0) return false;
     int o = 0;
-    while(o < g->count[0]) {
+    while(o < g->count) {
         if (task < g->task[o]) return false; // not found
         if (task == g->task[o]) break;
         o++;
     }
     o++;
-    while(o < g->count[0]) {
+    while(o < g->count) {
         g->task[o - 1] = g->task[o];
         o++;
     }
-    g->count[0]--;
+    g->count--;
     return true;
 }
 
 static bool isInTaskGroup(TaskGroup* g, int task)
 {
-    for(int i = 0; i< g->count[0]; i++)
+    for(int i = 0; i< g->count; i++)
         if (task == g->task[i]) return true;
     return false;
 }
@@ -1122,9 +1124,9 @@ void calcAddReductions(int tflags,
 #define MAX_TASKS 65536
     int inputTask[MAX_TASKS], outputTask[MAX_TASKS];
     TaskGroup inputGroup, outputGroup;
-    inputGroup.count[0] = 0;
+    inputGroup.count = 0;
     inputGroup.task = inputTask;
-    outputGroup.count[0] = 0;
+    outputGroup.count = 0;
     outputGroup.task = outputTask;
 
     // travers borders and if this task has reduction input or wants output,
@@ -1200,14 +1202,14 @@ void calcAddReductions(int tflags,
                 range.to.i[0] = nextBorder;
 
                 // check for special case: one input, ie. no reduction needed
-                if (inputGroup.count[0] == 1) {
+                if (inputGroup.count == 1) {
                     // should not check for special cases if not true
                     assert(oneInputIsCopy(redOp));
 
                     if (inputGroup.task[0] == myid) {
                         // only this task as input
 
-                        if ((outputGroup.count[0] == 1) &&
+                        if ((outputGroup.count == 1) &&
                             (outputGroup.task[0] == myid)) {
 
                             // local (copy) operation
@@ -1227,7 +1229,7 @@ void calcAddReductions(int tflags,
 
                         if (!(tflags & LAIK_TF_KEEP_REDUCTIONS)) {
                             // TODO: broadcasts might be supported in backend
-                            for(int out = 0; out < outputGroup.count[0]; out++) {
+                            for(int out = 0; out < outputGroup.count; out++) {
                                 if (outputGroup.task[out] == myid) {
                                     // local (copy) operation
                                     appendLocalTOp(&range,
@@ -1263,7 +1265,7 @@ void calcAddReductions(int tflags,
                     else {
                         if (!(tflags & LAIK_TF_KEEP_REDUCTIONS)) {
                             // one input from somebody else
-                            for(int out = 0; out < outputGroup.count[0]; out++) {
+                            for(int out = 0; out < outputGroup.count; out++) {
                                 if (outputGroup.task[out] != myid) continue;
 
                                 // receive operation
@@ -1321,8 +1323,8 @@ void calcAddReductions(int tflags,
         }
     }
     // all tasks should be removed from input/output groups
-    assert(inputGroup.count[0] == 0);
-    assert(outputGroup.count[0] == 0);
+    assert(inputGroup.count == 0);
+    assert(outputGroup.count == 0);
     freeBorderList();
 }
 
@@ -1553,7 +1555,7 @@ do_calc_transition(Laik_Space* space,
     int gListSize = groupListCount * sizeof(TaskGroup);
     int tListSize = 0;
     for (int i = 0; i < groupListCount; i++)
-        tListSize += groupList[i].count[0] * sizeof(int);
+        tListSize += groupList[i].count * sizeof(int);
 
     int tsize = sizeof(Laik_Transition) + gListSize + tListSize +
                 localSize + initSize + sendSize + recvSize + redSize;
@@ -1610,9 +1612,9 @@ do_calc_transition(Laik_Space* space,
     // copy group list and task list of each group into transition object
     char* tList = ((char*)t) + tListOff;
     for (int i = 0; i < groupListCount; i++) {
-        t->subgroup[i].count[0] = groupList[i].count[0];
+        t->subgroup[i].count = groupList[i].count;
         t->subgroup[i].task = (int*) tList;
-        tListSize = groupList[i].count[0] * sizeof(int);
+        tListSize = groupList[i].count * sizeof(int);
         memcpy(tList, groupList[i].task, tListSize);
         tList += tListSize;
     }
@@ -1672,7 +1674,7 @@ int laik_trans_groupCount(Laik_Transition* t, int subgroup)
         return t->group->size;
 
     assert((subgroup >= 0) && (subgroup < t->subgroupCount));
-    return t->subgroup[subgroup].count[0];
+    return t->subgroup[subgroup].count;
 }
 
 // return task of <i>'th task in group with ID <subgroup> in transition <t>
@@ -1684,7 +1686,7 @@ int laik_trans_taskInGroup(Laik_Transition* t, int subgroup, int i)
     }
 
     assert((subgroup >= 0) && (subgroup < t->subgroupCount));
-    assert((i >= 0) && (i < t->subgroup[subgroup].count[0]));
+    assert((i >= 0) && (i < t->subgroup[subgroup].count));
     return t->subgroup[subgroup].task[i];
 }
 
@@ -1696,38 +1698,27 @@ bool laik_trans_isInGroup(Laik_Transition* t, int subgroup, int task)
 
     assert(subgroup < t->subgroupCount);
     TaskGroup* tg = &(t->subgroup[subgroup]);
-    for(int i = 0; i < tg->count[0]; i++)
+    for(int i = 0; i < tg->count; i++)
         if (tg->task[i] == task) return true;
     return false;
 }
 
-
-
-int laik_secondary_taskInGroup(Laik_Transition* t, int subgroup, int i, int chain_idx){
-    assert(i < t->subgroup[subgroup].count[chain_idx + 1]);
-    assert(subgroup < t->subgroupCount);
-
-    return t -> subgroup[subgroup].task[i];
-}
-
-// shit, update
-void laik_secondary_updateGroupCount(Laik_Transition* t, int subgroup, int count, int chain_idx)
+void laik_trans_movetoAS(Laik_ActionSeq* as)
 {
-    t->subgroup[subgroup].count[chain_idx + 1] = count;
+    Laik_TransitionContext* tc = as -> context[0];
+    Laik_Transition* t = tc -> transition;
+    int numSubGroups = as->subgroupCount = t->subgroupCount;
+    as->subgroups = malloc(numSubGroups * sizeof(TaskGroupAS));
+
+    for(int i = 0; i < numSubGroups; ++i)
+    {   
+        int count = laik_trans_groupCount(t, i);
+        int len = MAX_SECONDARIES + count;
+        as->subgroups[i].tasks = malloc(len * sizeof(int));
+        as->subgroups[i].size = len;
+
+        as->subgroups[i].count[0] = count;
+        as->subgroups[i].offset[0] = 0;
+        memcpy(as->subgroups[i].tasks, t->subgroup[i].task, count * sizeof(int));
+    }
 }
-
-void laik_secondary_addSubGroup(Laik_Transition* t, int subgroup, int count, int* myranks, int myrankNum, int chain_idx){
-
-    memcpy(&t->subgroup[subgroup].task[count], myranks, myrankNum * sizeof(int));
-
-    t->subgroup[subgroup].count[chain_idx + 1] = count + myrankNum; 
-
-}
-
-
-void laik_secondary_updateTask(Laik_Transition* t, int subgroup, int id, int task){
-
-    t->subgroup[subgroup].task[id] = task;
-}
-
-

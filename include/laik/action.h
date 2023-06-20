@@ -118,6 +118,9 @@ typedef struct _Laik_Action Laik_Action;
 // for actions refering to a transition
 typedef struct _Laik_TransitionContext Laik_TransitionContext;
 
+// for delegating parts of subgroups to secondaries
+typedef struct _TaskGroupAS TaskGroupAS;
+
 //
 // Laik_ActionSeq
 //

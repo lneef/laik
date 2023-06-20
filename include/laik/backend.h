@@ -93,10 +93,21 @@ struct _Laik_Backend {
 };
 
 struct _Laik_Secondary {
+  //index in chain of secondary backends
   unsigned chain_index;
+
+  // delete all buffers allocated by secondary backend
   void (*laik_secondary_finalize)();
-  bool (*laik_replace_secondary)(const Laik_Backend*, Laik_ActionSeq *);
+
+  //prepare action sequence, i.e. replace generic laik actions with backend specific actions
+  bool (*laik_secondary_prepare)(const Laik_Backend*, Laik_ActionSeq *);
+
+  //execute backend specific action
   bool (*laik_secondary_exec)(const Laik_Backend*, Laik_ActionSeq *, Laik_Action *);
+
+  //cleanup temporary buffers
+  void (*laik_secondary_cleanup)();
+
   bool (*laik_secondary_log_action)(Laik_Action *);
 };
 

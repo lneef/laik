@@ -19,6 +19,7 @@
 #define LAIK_ACTION_INTERNAL_H
 
 #include "laik.h"         // for Laik_Instance, Laik_Group
+#include "laik/definitions.h"
 
 // Action sequences are used in the public LAIK API as abstraction
 // for compound communication requests, e.g. consisting of multiple
@@ -206,7 +207,7 @@ struct _Laik_ActionSeq {
 
     Laik_Instance* inst;
 
-    // if non-null, only this backend can execute the sequence, and
+    // if non-null, only this primary backend can execute the sequence, and
     // the backend gets called for clean-up when the sequence is destroyed
     Laik_Backend* backend;
 
@@ -227,6 +228,9 @@ struct _Laik_ActionSeq {
     Laik_CopyEntry* ce[ASEQ_COPYENTRY_MAX];
     int ceCount;
     int ceRanges;
+
+    int subgroupCount;
+    TaskGroupAS* subgroups;
 
     // action sequence to trigger on execution
     unsigned int actionCount;
@@ -252,7 +256,39 @@ struct _Laik_ActionSeq {
     uint64_t initOpCount, reduceOpCount, byteBufCopyCount;
 };
 
+// initially contains one subgroup
+// each secondary backend extracts the ranks with whom it can perform a partial reduction
+// replaces previous subgroup with primaries
+struct _TaskGroupAS
+{
+    //size of the memory segment
+    int size;
+    //number of ranks in each secondary specific part of the subgroup
+    int count[MAX_SECONDARIES + 1];
 
+    //offset of each secondary specific part of the subgroup
+    int offset[MAX_SECONDARIES + 1];
+
+    //initial subroup - a list of ranks - which is split up among the backends
+    //fragmentation into several sublist with backend specific ranks
+    int* tasks;
+};
+
+bool laik_aseq_isInGroup(Laik_ActionSeq* as, int subgroup, int task, int chain_idx);
+
+int laik_aseq_taskInGroup(Laik_ActionSeq* as, int subgroup, int i, int chain_idx);
+
+void laik_aseq_addSecondaryGroup(Laik_ActionSeq* as, int subgroup, int* ranks, int rankNum, int chain_idx);
+
+void laik_aseq_updateGroup(Laik_ActionSeq* as, int subgroup, int* ranks, int rankNum, int chain_idx);
+
+void laik_aseq_updateTask(Laik_ActionSeq* as, int subgroup, int i, int task, int chain_idx);
+
+void laik_aseq_updateGroupCount(Laik_ActionSeq* as, int subgroup, int count, int chain_idx);
+
+int laik_aseq_groupCount(Laik_ActionSeq* as, int subgroup, int chain_idx);
+
+void laik_aseq_removefromAS(Laik_ActionSeq* as);
 
 // helpers for building new action sequences. New actions are first
 // stored in temporary space, and only becoming active when calling

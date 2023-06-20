@@ -25,7 +25,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include "backends/shmem/shmem.h"
+#include "backends/shmem/shmem-allocator.h"
 
 
 // provided allocators

@@ -223,7 +223,7 @@ struct recvTOp {
 
 // referenced in reduction operation within a transition
 typedef struct _TaskGroup {
-    int count[MAX_SECONDARIES + 1];
+    int count;
     int* task; // sorted list
 } TaskGroup;
 
@@ -295,19 +295,9 @@ int laik_trans_taskInGroup(Laik_Transition* t, int subgroup, int i);
 // true if a task is part of the group with ID <subgroup> in transition <t>
 bool laik_trans_isInGroup(Laik_Transition* t, int subgroup, int task);
 
-// return task ID in secondary backend in group with ID <subgroup> in transition <t>
-int laik_secondary_taskInGroup(Laik_Transition* t, int subgroup, int i, int chain_idx);
-
-// update task group by replacing some tasks with secondary specific task IDs
-void laik_secondary_addSubGroup(Laik_Transition* t, int subgroup, int count, int* myranks, int myrankNum, int chain_idx);
-
-// update task ID at position <i>
-void laik_secondary_updateTask(Laik_Transition* t, int subgroup, int id, int task);
-
-//update length subset <chain_idx> of subgroup <subgroup>
-void laik_secondary_updateGroupCount(Laik_Transition* t, int subgroup, int count, int chain_idx);
-
 // initialize the LAIK space module, called from laik_new_instance
 void laik_space_init(void);
+
+void  laik_trans_movetoAS(Laik_ActionSeq* as);
 
 #endif // LAIK_SPACE_INTERNAL_H

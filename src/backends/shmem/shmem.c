@@ -15,12 +15,13 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+
 #include "shmem.h"
-#include "backends/tcp/errors.h"
+#include "shmem-allocator.h"
+#include "laik-internal.h"
+#include "laik.h"
 #include "laik/core.h"
-#include "node.h"
-#include "laik/space-internal.h"
-#include "laik/core-internal.h"
+#include "shmem-allocator.h"
 
 #include <assert.h>
 #include <errno.h>
@@ -69,17 +70,6 @@ struct metaInfos{
     int offset;
 };
 
-struct shmList
-{
-    void *ptr;
-    int shmid;
-    int size;
-    struct shmList *next;
-};
-
-struct shmList *head;
-struct shmList *tail;
-
 struct groupInfo groupInfo;
 int openShmid = -1;
 int metaShmid = -1;
@@ -108,12 +98,7 @@ void deleteOpenShmSegs()
         shmctl(metaShmid, IPC_RMID, 0);
     }
 
-    struct shmList *l = tail;
-    while(l != NULL){
-        shmdt(l->ptr);
-        shmctl(l->shmid, IPC_RMID, 0);
-        l = l->next;
-    }
+    deleteAllocatedSegments();
 }
 
 int createMetaInfoSeg()
@@ -122,8 +107,6 @@ int createMetaInfoSeg()
     metaShmid = shmget(shmAddr, sizeof(struct metaInfos), 0644 | IPC_CREAT);
     if (metaShmid == -1)
         return SHMEM_SHMGET_FAILED;
-    
-    laik_log(2, "%d", metaShmid);
 
     struct metaInfos *shmp = shmat(metaShmid, NULL, 0);
     if (shmp == (void *)-1)
@@ -239,24 +222,8 @@ int shmem_get_identifier(int *ident)
     return SHMEM_SUCCESS;
 }
 
-int get_shmid(void *ptr, int *shmid, int *offset)
-{
-    for(struct shmList *l = tail; l != NULL; l = l->next)
-    {
-        int diff = (int) (ptr - l->ptr);
-        if(diff >= 0 && diff < l->size)
-        {
-            *offset = diff;
-            *shmid = l->shmid;
-            return SHMEM_SUCCESS;
-        }
-    }
-    return SHMEM_SEGMENT_NOT_FOUND;
-}
-
 int shmem_2cpy_send(void *buffer, int count, int datatype, int recipient)
 {
-    laik_log(2, "Two");
     int size = datatype * count;
     int shmAddr = hash(recipient + hash(pair(groupInfo.colour, groupInfo.rank))) + BUF_OFFSET;
     int bufShmid = shmget(shmAddr, size, 0644 | IPC_CREAT);
@@ -376,7 +343,6 @@ int shmem_1cpy_send(void *buffer, int count, int datatype, int recipient)
 int shmem_1cpy_recv(void *buffer, int count, int datatype, int sender, int *received)
 {
     int shmAddr = hash(pair(groupInfo.colour, sender)) + META_OFFSET;
-    laik_log(2, "%d", shmAddr);
     time_t t_0 = time(NULL);
     int shmid = shmget(shmAddr, 0, 0644);
     while (shmid == -1 && time(NULL) - t_0 < MAX_WAITTIME)
@@ -388,7 +354,6 @@ int shmem_1cpy_recv(void *buffer, int count, int datatype, int sender, int *rece
     struct metaInfos *shmp = shmat(shmid, NULL, 0);
     if (shmp == (void *)-1)
         return SHMEM_SHMAT_FAILED;
-    laik_log(2, "%d", shmid);
 
     while (shmp->receiver != groupInfo.rank)
     {
@@ -511,8 +476,6 @@ int shmem_secondary_init(Laik_Instance* inst, int primaryRank, int primarySize, 
     {
         groupInfo.send = shmem_1cpy_send;
         groupInfo.recv = shmem_1cpy_recv;
-
-        laik_log(2, "one copy");
     }
     else 
     {
@@ -666,7 +629,7 @@ int shmem_secondary_init(Laik_Instance* inst, int primaryRank, int primarySize, 
     if (err != SHMEM_SUCCESS)
         return err;
 
-    laik_log(2, "%d", metaShmid);
+    laik_log(1, "Rank:%d on Island:%d", groupInfo.rank, groupInfo.colour);
     return SHMEM_SUCCESS;
 }
 
@@ -682,156 +645,60 @@ int shmem_get_secondaryRanks(int **buf)
     return SHMEM_SUCCESS;
 }
 
-void register_shmSeg(void *ptr, int shmid, int size)
-{
-    struct shmList *new = malloc(sizeof(struct shmList));
-    new->ptr = ptr;
-    new->shmid = shmid;
-    new->size = size;
-    new->next = NULL;
+void shmem_transformSubGroup(Laik_Transition* t, Laik_ActionSeq* as, int chain_idx){
 
-    if (head == NULL)
+    int *processed  = malloc(groupInfo.num_islands * sizeof(int));
+
+    for(int subgroup = 0; subgroup < as->subgroupCount; ++subgroup)
     {
-        head = new;
-        tail = new;
-        return;
-    }
-    head->next = new;
-    head = new;
-}
+        int last = 0;
+        int ii = 0;
+        memset(processed, -1, groupInfo.num_islands * sizeof(int));
+        int tmp[groupInfo.size];
 
-int get_shmid_and_destroy(void *ptr, int *shmid)
-{
-    if(tail == NULL)
-        return SHMEM_SEGMENT_NOT_FOUND;
+        int count = laik_aseq_groupCount(as , subgroup, -1);
 
-    struct shmList *previous = NULL;
-    struct shmList *current = tail;
+        if(count == t->group->size)
+        {   
+            laik_aseq_updateGroup(as, subgroup, groupInfo.primarys, groupInfo.num_islands, -1);
+            continue;
+        }
 
-    while(current != NULL)
-    {
-        if(ptr == current->ptr)
+        for(int i = 0; i < count; ++i)
         {
-            *shmid = current->shmid;
-            if(previous == NULL)
+            int inTask = laik_aseq_taskInGroup(as,  subgroup, i, -1);
+
+            if(processed[groupInfo.colours[inTask]] == -1)
             {
-                tail = current->next;
+                laik_aseq_updateTask(as, subgroup, last, inTask, -1);
+                ++last;
+                processed[groupInfo.colours[inTask]] = inTask;
             }
-            else
+
+            if(groupInfo.colour == groupInfo.colours[inTask])
             {
-                previous->next = current->next;
+                tmp[ii++] = groupInfo.secondaryRanks[inTask];
             }
-
-            if(current->next == NULL){
-                head = previous;
-            }
-            free(current);
-            return SHMEM_SUCCESS;
-        }
-        previous = current;
-        current = current->next;
-    }
-    return SHMEM_SEGMENT_NOT_FOUND;
-}
-
-static int cnt = 0;
-
-void* def_shmem_malloc(Laik_Data* d, size_t size){
-    
-    (void) d; // not used in this implementation of interface
-    int shmid = shmget(IPC_PRIVATE, size, 0644 | IPC_CREAT | IPC_EXCL);
-    if (shmid == -1)
-    {   
-        laik_panic("def_shmem_malloc couldn't create the shared memory segment: shmid == -1");
-        return NULL;
-    }
-    
-    // Attach to the segment to get a pointer to it.
-    void *ptr = shmat(shmid, NULL, 0);
-    if (ptr == (void *)-1)
-    {
-        laik_panic("def_shmem_malloc couldn't attach to the shared memory segment");
-        return NULL;
-    }
-
-    memset(ptr, 0, size);
-
-    register_shmSeg(ptr, shmid, size);
-    return ptr;
-}
-
-void def_shmem_free(Laik_Data* d, void* ptr){
-    (void) d; // not used in this implementation of interface
-
-    int shmid;
-    if(get_shmid_and_destroy(ptr, &shmid) != SHMEM_SUCCESS)
-        laik_panic("def_shmem_free couldn't find the given shared memory segment");
-
-    if (shmdt(ptr) == -1)
-        laik_panic("def_shmem_free couldn't detach from the given pointer");
-
-    if (shmctl(shmid, IPC_RMID, 0) == -1)
-        laik_panic("def_shmem_free couldn't destroy the shared memory segment");
-    
-}
-
-void transformSubGroup(Laik_Transition* t, int subgroup, groupTransform* group, int chain_idx){
-    int primary = -1;
-    bool member = false;
-    int last = 0;
-    int ii = 0;
-
-    int processed[groupInfo.num_islands];
-    memset(processed, -1, groupInfo.num_islands * sizeof(int));
-
-    int tmp[groupInfo.size];
-
-    int count = laik_trans_groupCount(t , subgroup);
-
-
-    if(count == t->group->size)
-    {   
-        laik_secondary_updateGroupCount(t, subgroup, 0, -1);
-        laik_secondary_addSubGroup(t, subgroup, 0, groupInfo.primarys, groupInfo.num_islands, -1);
-        return;
-    }
-
-    for(int i = 0; i < count; ++i)
-    {
-        int inTask = laik_trans_taskInGroup(t, subgroup, i);
-
-        if(processed[groupInfo.colours[inTask]] == -1)
-        {
-            laik_secondary_updateTask(t, subgroup, last, inTask);
-            ++last;
-            processed[groupInfo.colours[inTask]] = inTask;
         }
 
-        if(groupInfo.colour == groupInfo.colours[inTask])
-        {
-            tmp[ii++] = groupInfo.secondaryRanks[inTask];
+        laik_aseq_updateGroupCount(as, subgroup, last, -1);
 
-            member |= groupInfo.rank == groupInfo.secondaryRanks[inTask];
-        }
+        laik_aseq_addSecondaryGroup(as, subgroup, tmp, ii, chain_idx);
     }
 
-    laik_secondary_updateGroupCount(t, subgroup, last, -1);
-
-    if(ii > 0) primary = groupInfo.secondaryRanks[processed[groupInfo.colour]];
-
-    if(ii > 1) laik_secondary_addSubGroup(t, subgroup, last, &tmp[1], ii - 1, chain_idx);
-
-
-    group->primary = primary;
-    group->member = member;
-    group->sectionE = last + ii - 1;
-    group->sectionB = last;
+    free(processed);
 }
 
-int main(int argc, char **argv)
+bool onSameIsland(Laik_ActionSeq* as, int inputgroup, int outputgroup, int chain_idx)
 {
-    (void)argc;
-    (void) argv;
+    int inCount = laik_aseq_groupCount(as, inputgroup, chain_idx - 1);
+    int outCount = laik_aseq_groupCount(as, outputgroup, chain_idx - 1);
 
-    return SHMEM_SUCCESS;
+    if(inCount != 1 || outCount != 1)   return false;
+
+    int rankI = laik_aseq_taskInGroup(as, inputgroup, 0, chain_idx - 1);
+    int rankO = laik_aseq_taskInGroup(as, outputgroup, 0, chain_idx - 1);
+
+    return groupInfo.colours[rankI] == groupInfo.colours[rankO];
 }
+
