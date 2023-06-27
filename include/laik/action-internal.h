@@ -18,6 +18,7 @@
 #ifndef LAIK_ACTION_INTERNAL_H
 #define LAIK_ACTION_INTERNAL_H
 
+#include "definitions.h"
 #include "laik.h"         // for Laik_Instance, Laik_Group
 #include "laik/definitions.h"
 
@@ -229,8 +230,12 @@ struct _Laik_ActionSeq {
     int ceCount;
     int ceRanges;
 
+    // subgroups corresponding to reductions  
     int subgroupCount;
     TaskGroupAS* subgroups;
+
+    // secondary backend specific data necessary for executing the action sequence
+    void* secondary_data[MAX_SECONDARIES];
 
     // action sequence to trigger on execution
     unsigned int actionCount;

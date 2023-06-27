@@ -5,11 +5,13 @@
 
 #include "laik.h"
 
-void* def_shmem_malloc(Laik_Data* d, size_t size);
-
-void def_shmem_free(Laik_Data* d, void* ptr);
+void shmem_free(void* ptr);
 
 void deleteAllocatedSegments(void);
+
+void* shmem_alloc(size_t size, int* shimdPtr);
+
+void cleanup(void);
 
 int get_shmid(void *ptr, int *shmid, int *offset);
 

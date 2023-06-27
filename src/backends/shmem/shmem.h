@@ -68,6 +68,6 @@ int shmem_finalize();
 
 bool onSameIsland(Laik_ActionSeq* as, int inputgroup, int outputgroup, int chain_idx);
 
-void shmem_transformSubGroup(Laik_Transition* t, Laik_ActionSeq* as,  int chain_idx);
+void shmem_transformSubGroup(Laik_Transition* t, Laik_ActionSeq* as, int chain_idx);
 
 #endif

@@ -2081,7 +2081,7 @@ bool laik_aseq_flattenPacking(Laik_ActionSeq* as)
 // helpers for splitReduce transformation
 
 // add actions for 3-step manual reduction for a group-reduce action
-// spread rounds by 3
+// spread rounds by 3flatten
 // round 0: send to reduce task, round 1: reduction, round 2: send back
 static
 void laik_aseq_addReduce3Rounds(Laik_ActionSeq* as,
@@ -2695,4 +2695,6 @@ void laik_aseq_removefromAS(Laik_ActionSeq* as)
     {
         free(as->subgroups[i].tasks);
     }
+
+    free(as->subgroups);
 }

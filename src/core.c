@@ -133,6 +133,17 @@ Laik_Instance* laik_init(int* argc, char*** argv)
     return inst;
 }
 
+void laik_init_secondaries(Laik_Instance* inst, int primaryRank, int primarySize, int (*send)(int *, int, int),
+                         int (*recv)(int *, int, int))
+{
+    char* sec = getenv("LAIK_SECONDARIES");
+
+    if(sec == NULL) return;
+
+    if(!strcmp(sec,"SHMEM" ))
+        laik_shmem_secondary_init(inst,  primaryRank, primarySize, send, recv);
+}
+
 
 int laik_size(Laik_Group* g)
 {

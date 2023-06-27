@@ -32,8 +32,6 @@
 #include <unistd.h>
 #include <string.h>
 
-#include <laik-backend-shmem.h>
-
 // forward decls, types/structs , global variables
 static void laik_mpi_finalize(const Laik_Backend* this, Laik_Instance*);
 static void laik_mpi_prepare(const Laik_Backend* this, Laik_ActionSeq*);
@@ -413,7 +411,7 @@ Laik_Instance *laik_init_mpi(int *argc, char ***argv)
     recv = &recvIntegers;
     initComm = d->comm;
     inst -> backend -> chain_length = 0;
-    laik_shmem_secondary_init(inst, rank, size, send, recv);
+    laik_init_secondaries(inst, rank, size, send, recv);
 
     mpi_instance = inst;
     return inst;
@@ -432,10 +430,11 @@ static MPIGroupData *mpiGroupData(Laik_Group *g)
 static
 void laik_mpi_finalize(const Laik_Backend* this, Laik_Instance* inst)
 {
-    (void) this;
     assert(inst == mpi_instance);
 
-    this->chain[0]->laik_secondary_finalize();
+    for(int i = 0; i < this -> chain_length; ++i)
+        this->chain[i]->laik_secondary_finalize();
+    
     if (mpiData(mpi_instance)->didInit)
     {
         int err = MPI_Finalize();
@@ -1080,7 +1079,7 @@ void laik_mpi_exec(const Laik_Backend* this, Laik_ActionSeq* as)
             break;
 
         default:
-            if(!this->chain[a->chain_idx]->laik_secondary_exec(this, as, a)){
+            if(!this->chain[a->chain_idx]->laik_secondary_exec(this->chain[a->chain_idx], as, a)){
                 laik_log(LAIK_LL_Panic, "mpi_exec: no idea how to exec action %d (%s)",
                          a->type, laik_at_str(a->type));
                 assert(0);
@@ -1160,7 +1159,11 @@ void laik_mpi_prepare(const Laik_Backend* this, Laik_ActionSeq* as)
     // changed = laik_aseq_sort_rankdigits(as);
     laik_log_ActionSeqIfChanged(changed, as, "After sorting for deadlock avoidance");
 
-    changed = this->chain[0]->laik_secondary_prepare(this, as);
+    changed = false;
+    for(int i = this->chain_length - 1; i > -1; --i)
+    {
+        changed |= this->chain[i]->laik_secondary_prepare(this->chain[i], as);
+    }   
     laik_log_ActionSeqIfChanged(changed, as, "After replacing with shmem calls");
 
     changed = laik_aseq_combineActions(as);
@@ -1205,7 +1208,6 @@ void laik_mpi_prepare(const Laik_Backend* this, Laik_ActionSeq* as)
 
 static void laik_mpi_cleanup(const Laik_Backend* this, Laik_ActionSeq* as)
 {
-    (void)this;
     if (laik_log_begin(1)) {
         laik_log_append("MPI backend cleanup:\n");
         laik_log_ActionSeq(as, false);
@@ -1220,6 +1222,9 @@ static void laik_mpi_cleanup(const Laik_Backend* this, Laik_ActionSeq* as)
         free(aa->req);
         laik_log(1, "  freed MPI_Request array with %d entries", aa->count);
     }
+
+    for(int i = 0; i < this->chain_length; ++i)
+        this->chain[i]->laik_secondary_cleanup();
 
     laik_aseq_removefromAS(as);
 

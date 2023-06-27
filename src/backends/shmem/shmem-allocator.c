@@ -1,78 +1,99 @@
 
+#include "backends/shmem/shmem-allocator.h"
 #include "laik.h"
+#include "laik/core.h"
 #include "shmem.h"
 
+#include <stddef.h>
 #include <sys/shm.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdalign.h>
 
-struct shmList
+struct shmSeg
 {
-    void *ptr;
+    void* ptr;
     int shmid;
     int size;
-    struct shmList *next;
+    struct shmSeg *next;
 };
 
-struct shmList *head;
-struct shmList *tail;
+//dummy element as head
+static struct shmSeg shmList;
 
-static void register_shmSeg(void *ptr, int shmid, int size)
+static void register_shmSeg(struct shmSeg* new)
 {
-    struct shmList *new = malloc(sizeof(struct shmList));
-    new->ptr = ptr;
-    new->shmid = shmid;
-    new->size = size;
-    new->next = NULL;
-
-    if (head == NULL)
-    {
-        head = new;
-        tail = new;
-        return;
-    }
-    head->next = new;
-    head = new;
+    new->next = shmList.next;
+    shmList.next = new;
 }
 
 static int get_shmid_and_destroy(void *ptr, int *shmid)
 {
-    if(tail == NULL)
+    if(shmList.next == NULL)
         return SHMEM_SEGMENT_NOT_FOUND;
 
-    struct shmList *previous = NULL;
-    struct shmList *current = tail;
+    struct shmSeg *previous = NULL;
+    struct shmSeg *current = &shmList;
 
-    while(current != NULL)
+    while(current->next != NULL)
     {
-        if(ptr == current->ptr)
+        previous = current -> next;
+        if(ptr == previous->ptr)
         {
-            *shmid = current->shmid;
-            if(previous == NULL)
-            {
-                tail = current->next;
-            }
-            else
-            {
-                previous->next = current->next;
-            }
-
-            if(current->next == NULL){
-                head = previous;
-            }
-            free(current);
+            
+            *shmid = previous->shmid;
+            current -> next = previous -> next; 
+            free(previous);
             return SHMEM_SUCCESS;
         }
-        previous = current;
         current = current->next;
     }
     return SHMEM_SEGMENT_NOT_FOUND;
 }
 
+void deleteAllocatedSegments(void){
+    struct shmSeg *l = shmList.next;
+    while(l != NULL){
+        shmdt(l->ptr);
+        shmctl(l->shmid, IPC_RMID, 0);
+        struct shmSeg* tmp = l;
+        l = l->next;
+        free(tmp);
+    }
+    shmList.next = NULL;
+}
 
-void* def_shmem_malloc(Laik_Data* d, size_t size){
-    
-    (void) d; // not used in this implementation of interface
+void shmem_free(void* ptr)
+{
+    int shmid;
+    if(get_shmid_and_destroy(ptr, &shmid) != SHMEM_SUCCESS)
+        laik_panic("def_shmem_free couldn't find the given shared memory segment");
+
+    if (shmdt(ptr) == -1)
+        laik_panic("def_shmem_free couldn't detach from the given pointer");
+
+    if (shmctl(shmid, IPC_RMID, 0) == -1)
+        laik_panic("def_shmem_free couldn't destroy the shared memory segment");
+}
+
+int get_shmid(void *ptr, int *shmid, int *offset)
+{
+    for(struct shmSeg *l = shmList.next; l != NULL; l = l->next)
+    {
+        int diff = (int) (ptr - l->ptr);
+        if(diff >= 0 && diff < l->size)
+        {
+            *offset = diff;
+            *shmid = l->shmid;
+            return SHMEM_SUCCESS;
+        }
+    }
+    return SHMEM_SEGMENT_NOT_FOUND;
+}
+
+void* shmem_alloc(size_t size, int* shimdPtr)
+{
+
     int shmid = shmget(IPC_PRIVATE, size, 0644 | IPC_CREAT | IPC_EXCL);
     if (shmid == -1)
     {   
@@ -88,48 +109,17 @@ void* def_shmem_malloc(Laik_Data* d, size_t size){
         return NULL;
     }
 
-    memset(ptr, 0, size);
+    struct shmSeg* seg = malloc(sizeof(struct shmSeg));
+    seg -> ptr = ptr;
+    seg -> size = size;
+    seg -> shmid = shmid;
+    register_shmSeg(seg);
 
-    register_shmSeg(ptr, shmid, size);
+    *shimdPtr = shmid;
+
     return ptr;
 }
 
-void deleteAllocatedSegments(void){
-    struct shmList *l = tail;
-    while(l != NULL){
-        shmdt(l->ptr);
-        shmctl(l->shmid, IPC_RMID, 0);
-        l = l->next;
-    }
-}
 
-void def_shmem_free(Laik_Data* d, void* ptr){
-    (void) d; // not used in this implementation of interface
 
-    int shmid;
-    if(get_shmid_and_destroy(ptr, &shmid) != SHMEM_SUCCESS)
-        laik_panic("def_shmem_free couldn't find the given shared memory segment");
-
-    if (shmdt(ptr) == -1)
-        laik_panic("def_shmem_free couldn't detach from the given pointer");
-
-    if (shmctl(shmid, IPC_RMID, 0) == -1)
-        laik_panic("def_shmem_free couldn't destroy the shared memory segment");
-    
-}
-
-int get_shmid(void *ptr, int *shmid, int *offset)
-{
-    for(struct shmList *l = tail; l != NULL; l = l->next)
-    {
-        int diff = (int) (ptr - l->ptr);
-        if(diff >= 0 && diff < l->size)
-        {
-            *offset = diff;
-            *shmid = l->shmid;
-            return SHMEM_SUCCESS;
-        }
-    }
-    return SHMEM_SEGMENT_NOT_FOUND;
-}
 
