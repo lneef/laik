@@ -1198,6 +1198,7 @@ void laik_shmem_secondary_cleanup()
 {   
     laik_log(1, "Shared Memory Backend Cleanup");
     shmem_manager_cleanup();
+    cleanupBuffer();
    
 }
 //https://graphics.stanford.edu/~seander/bithacks.html#IntegerMinOrMaxS
@@ -1223,7 +1224,7 @@ bool laik_shmem_secondary_prepare(const Laik_Secondary* this, Laik_ActionSeq *as
     int reserveSize = 0;
     const int chain_idx = this -> chain_idx;
 
-    shmem_transformSubGroup(t, as, chain_idx);
+    shmem_transformSubGroup(as, chain_idx);
 
     bool global_ret = false;
     bool ret = false;
@@ -1239,7 +1240,6 @@ bool laik_shmem_secondary_prepare(const Laik_Secondary* this, Laik_ActionSeq *as
             if(colours[pRank] == colours[ba->rank]){
                 ba = (Laik_BackendAction*) laik_aseq_addr(a, as, 3 * a->round, chain_idx);
                 ba->rank = secondaryRanks[ba->rank];
-                reserveSize = max(ba -> count, reserveSize);
                 ba->h.type = LAIK_AT_ShmemMapSend;
                 ret = true;
             }
@@ -1248,7 +1248,6 @@ bool laik_shmem_secondary_prepare(const Laik_Secondary* this, Laik_ActionSeq *as
         case LAIK_AT_GroupReduce:
         {   
             Laik_BackendAction* ba = (Laik_BackendAction*) a;
-            reserveSize = max(ba -> count, reserveSize);
             shmem_replace_groupReduce(as, ba, tc);
             ret = true;
             break;
@@ -1256,7 +1255,6 @@ bool laik_shmem_secondary_prepare(const Laik_Secondary* this, Laik_ActionSeq *as
         case LAIK_AT_Reduce:
         {
             Laik_BackendAction* ba = (Laik_BackendAction*) a;
-            reserveSize = max(ba -> count, reserveSize);
             shmem_replace_reduce(as, ba, tc);
             ret = true;
             break;
@@ -1268,7 +1266,6 @@ bool laik_shmem_secondary_prepare(const Laik_Secondary* this, Laik_ActionSeq *as
                 aa = (Laik_A_BufSend*) laik_aseq_addr(a, as, 3 * a->round, chain_idx);
                 aa->to_rank = secondaryRanks[aa->to_rank];
                 aa->h.type = LAIK_AT_ShmemBufSend;
-                reserveSize = max(aa -> count, reserveSize);
                 ret = true;
             }
             break;
@@ -1279,7 +1276,6 @@ bool laik_shmem_secondary_prepare(const Laik_Secondary* this, Laik_ActionSeq *as
             if(colours[pRank] == colours[ba->rank]){
                 ba = (Laik_BackendAction*) laik_aseq_addr(a, as, 3 * a->round, chain_idx);
                 ba->rank = secondaryRanks[ba->rank];
-                reserveSize = max(ba -> count, reserveSize);
                 ba->h.type = LAIK_AT_ShmemMapRecv;
                 ret = true;
             }
@@ -1291,7 +1287,6 @@ bool laik_shmem_secondary_prepare(const Laik_Secondary* this, Laik_ActionSeq *as
             if(colours[pRank] == colours[aa->from_rank]){
                 aa = (Laik_A_BufRecv*) laik_aseq_addr(a, as, 3 * a->round, chain_idx);
                 aa->from_rank = secondaryRanks[aa->from_rank];
-                reserveSize = max(aa -> count, reserveSize);
                 aa->h.type = LAIK_AT_ShmemBufRecv;
                 ret = true;
             }
@@ -1303,7 +1298,6 @@ bool laik_shmem_secondary_prepare(const Laik_Secondary* this, Laik_ActionSeq *as
             if(colours[pRank] == colours[aa->to_rank]){
                 aa = (Laik_A_MapPackAndSend*) laik_aseq_addr(a, as, 3 * a->round, chain_idx);
                 aa->to_rank = secondaryRanks[aa->to_rank];
-                reserveSize = max(aa -> count, reserveSize);
                 aa->h.type = LAIK_AT_ShmemMapPackAndSend;
                 ret = true;
             }
@@ -1315,7 +1309,6 @@ bool laik_shmem_secondary_prepare(const Laik_Secondary* this, Laik_ActionSeq *as
             if(colours[pRank] == colours[ba->rank]){
                 ba = (Laik_BackendAction*) laik_aseq_addr(a, as, 3 * a->round, chain_idx);
                 ba->rank = secondaryRanks[ba->rank];
-                reserveSize = max(ba -> count, reserveSize);
                 ba->h.type = LAIK_AT_ShmemPackAndSend;
                 ret = true;
             }
@@ -1327,7 +1320,6 @@ bool laik_shmem_secondary_prepare(const Laik_Secondary* this, Laik_ActionSeq *as
             if(colours[pRank] == colours[aa->from_rank]){
                 aa = (Laik_A_MapRecvAndUnpack*) laik_aseq_addr(a, as, 3 * a->round, chain_idx);
                 aa->from_rank = secondaryRanks[aa->from_rank];
-                reserveSize = max(aa -> count, reserveSize);
                 aa->h.type = LAIK_AT_ShmemMapRecvAndUnpack;
                 ret = true;
             }
@@ -1339,7 +1331,6 @@ bool laik_shmem_secondary_prepare(const Laik_Secondary* this, Laik_ActionSeq *as
             if(colours[pRank] == colours[ba->rank]){
                 ba = (Laik_BackendAction*) laik_aseq_addr(a, as, 3 * a->round, chain_idx);
                 ba->rank = secondaryRanks[ba->rank];
-                reserveSize = max(ba -> count, reserveSize);
                 ba->h.type = LAIK_AT_ShmemRecvAndUnpack;
                 ret = true;
             }
@@ -1352,7 +1343,6 @@ bool laik_shmem_secondary_prepare(const Laik_Secondary* this, Laik_ActionSeq *as
                 aa = (Laik_A_RBufSend *) laik_aseq_addr(a, as, 3 * a->round, chain_idx);
                 aa->to_rank = secondaryRanks[aa->to_rank];
                 aa->h.type = LAIK_AT_ShmemRBufSend;
-                reserveSize = max(aa -> count, reserveSize);
                 ret = true;
             }
             break;
@@ -1364,7 +1354,6 @@ bool laik_shmem_secondary_prepare(const Laik_Secondary* this, Laik_ActionSeq *as
                 aa = (Laik_A_RBufRecv *) laik_aseq_addr(a, as, 3 * a->round, chain_idx);
                 aa->from_rank = secondaryRanks[aa->from_rank];
                 aa->h.type = LAIK_AT_ShmemRBufRecv;
-                reserveSize = max(aa -> count, reserveSize);
                 ret = true;
             }
             break;

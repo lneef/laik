@@ -45,8 +45,6 @@ int shmem_comm_colour(int *colourPtr);
 
 int shmem_get_identifier(int *ident);
 
-int shmem_colour_num(int* num);
-
 int shmem_send(void *buffer, int count, int datatype, int recipient);
 
 int shmem_recv(void *buffer, int count, int datatype, int sender, int *recieved);
@@ -60,14 +58,16 @@ int shmem_get_colours(int **buf);
 
 int shmem_get_island_num(int *num);
 
-int shmem_get_primarys(int **buf);
-
 int shmem_get_secondaryRanks(int **buf);
 
 int shmem_finalize();
 
+void cleanupBuffer();
+
+void createBuffer(size_t size);
+
 bool onSameIsland(Laik_ActionSeq* as, int inputgroup, int outputgroup, int chain_idx);
 
-void shmem_transformSubGroup(Laik_Transition* t, Laik_ActionSeq* as, int chain_idx);
+void shmem_transformSubGroup(Laik_ActionSeq* as, int chain_idx);
 
 #endif

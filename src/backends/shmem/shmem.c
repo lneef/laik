@@ -57,14 +57,16 @@ struct groupInfo
     int rank;
     int colour;
     int num_islands;
-    int *primarys;
+    int *primaryRanks;
     int *colours;
     int *secondaryRanks;
 
     struct cpyBuf* cpyBuf;
 
     int (*send)(void*, int, int, int);
-    int (*recv)(void*, int, int, int, int*);
+    
+    int (*sendP)(int *, int, int);
+    int (*recvP)(int *, int, int);
 };
 
 struct metaInfos{
@@ -196,7 +198,7 @@ int shmem_get_island_num(int* num){
 }
 
 int shmem_get_primarys(int** primarys){
-    *primarys = groupInfo.primarys;
+    *primarys = groupInfo.primaryRanks;
     return SHMEM_SUCCESS;
 }
 
@@ -280,13 +282,16 @@ int shmem_1cpy_send(void *buffer, int count, int datatype, int recipient)
 
 int shmem_recv(void *buffer, int count, int datatype, int sender, int *received)
 {
-    int shmAddr = hash(pair(groupInfo.colour, sender)) + META_OFFSET;
+    int shmid; //= hash(pair(groupInfo.colour, sender)) + META_OFFSET;
+    groupInfo.recvP(&shmid, 1, groupInfo.primaryRanks[sender]);
+    /*
     time_t t_0 = time(NULL);
     int shmid = shmget(shmAddr, 0, 0644);
     while (shmid == -1 && time(NULL) - t_0 < MAX_WAITTIME)
         shmid = shmget(shmAddr, 0, 0644);
     if (shmid == -1)
         return SHMEM_SHMGET_FAILED;
+        */
 
     // Attach to the segment to get a pointer to it.
     struct metaInfos *shmp = shmat(shmid, NULL, 0);
@@ -329,6 +334,7 @@ int shmem_recv(void *buffer, int count, int datatype, int sender, int *received)
 
 int shmem_send(void* buffer, int count, int datatype, int recipient)
 {
+    groupInfo.sendP(&metaShmid, 1, groupInfo.primaryRanks[recipient]);
     return groupInfo.send(buffer, count, datatype, recipient);
 }
 
@@ -366,7 +372,9 @@ int shmem_error_string(int error, char *str)
 
 int shmem_finalize()
 {
-    shmem_cpybuf_delete(groupInfo.cpyBuf);
+    if(groupInfo.cpyBuf)
+        free(groupInfo.cpyBuf);
+
     deleteOpenShmSegs();
     if (groupInfo.colours != NULL)
         free(groupInfo.colours);
@@ -374,8 +382,8 @@ int shmem_finalize()
     if (groupInfo.secondaryRanks != NULL)
         free(groupInfo.secondaryRanks);
     
-    if(groupInfo.primarys != NULL)
-        free(groupInfo.primarys);
+    if(groupInfo.primaryRanks != NULL)
+        free(groupInfo.primaryRanks);
 
     return SHMEM_SUCCESS;
 }
@@ -408,6 +416,9 @@ int shmem_secondary_init(Laik_Instance* inst, int primaryRank, int primarySize, 
     {
         laik_panic("Please provide a correct copy scheme: 1 or 2");
     }
+
+    groupInfo.sendP = send;
+    groupInfo.recvP = recv;
 
     bool created = false;
     struct shmInitSeg *shmp;
@@ -491,17 +502,15 @@ int shmem_secondary_init(Laik_Instance* inst, int primaryRank, int primarySize, 
 
         free(tmpColours);
 
-        int ii = 0;
         int groupSizes[primarySize];
         memset(groupSizes, 0, primarySize * sizeof(int));
-        groupInfo.primarys = malloc(primarySize * sizeof(int));
+
 
         for (int i = 0; i < primarySize; i++)
         {   
             if(groupSizes[groupInfo.colours[i]] == 0)
             {
-                groupInfo.num_islands++;
-                groupInfo.primarys[ii++] = i; 
+                groupInfo.num_islands++; 
             }
             
             int sec_rank = groupSizes[groupInfo.colours[i]]++;
@@ -514,8 +523,6 @@ int shmem_secondary_init(Laik_Instance* inst, int primaryRank, int primarySize, 
 
             groupInfo.secondaryRanks[i] = sec_rank;
         }
-
-        groupInfo.primarys = realloc(groupInfo.primarys, groupInfo.num_islands * sizeof(int));
         
 
         for (int i = 1; i < primarySize; i++)
@@ -524,7 +531,6 @@ int shmem_secondary_init(Laik_Instance* inst, int primaryRank, int primarySize, 
             (*send)(groupInfo.colours, primarySize, i);
             (*send)(groupInfo.secondaryRanks, primarySize, i);
             (*send)(&groupInfo.num_islands, 1, i);
-            (*send)(groupInfo.primarys, groupInfo.num_islands, i);
         }
         groupInfo.size = groupSizes[groupInfo.colours[0]];
     }
@@ -542,22 +548,27 @@ int shmem_secondary_init(Laik_Instance* inst, int primaryRank, int primarySize, 
         (*recv)(groupInfo.secondaryRanks, primarySize, 0);
 
         (*recv)(&groupInfo.num_islands, 1, 0);
-        groupInfo.primarys = malloc(groupInfo.num_islands * sizeof(int));
-        (*recv)(groupInfo.primarys, groupInfo.num_islands, 0);
+    }
+
+    groupInfo.primaryRanks = malloc(groupInfo.size * sizeof(int));
+
+    int ii = 0;
+    for(int i = 0; i < primarySize && ii < groupInfo.size; ++i)
+    {
+        if(groupInfo.colours[i] == groupInfo.colour){
+            groupInfo.primaryRanks[ii++] = i; 
+        } 
     }
 
     if (created && shmctl(openShmid, IPC_RMID, 0) == -1)
         return SHMEM_SHMCTL_FAILED;
     
-    openShmid = -1;
-    groupInfo.cpyBuf = shmem_cpybuf_obtain(COPY_BUF_SIZE);
+    groupInfo.cpyBuf = shmem_cpybuf_obtain();
     // Open the own meta info shm segment and set it to ready
     int err = createMetaInfoSeg();
     if (err != SHMEM_SUCCESS)
         return err;
     
-    
-
     laik_log(1, "Rank:%d on Island:%d", groupInfo.rank, groupInfo.colour);
     return SHMEM_SUCCESS;
 }
@@ -575,7 +586,7 @@ int shmem_get_secondaryRanks(int **buf)
 }
 
 
-void shmem_transformSubGroup(Laik_Transition* t, Laik_ActionSeq* as, int chain_idx){
+void shmem_transformSubGroup(Laik_ActionSeq* as, int chain_idx){
 
     bool* processed = malloc(groupInfo.num_islands * sizeof(bool));
     int* tmp = malloc(groupInfo.size * sizeof(int)); 
@@ -586,14 +597,6 @@ void shmem_transformSubGroup(Laik_Transition* t, Laik_ActionSeq* as, int chain_i
         memset(processed, false, groupInfo.num_islands * sizeof(bool));
 
         int count = laik_aseq_groupCount(as , subgroup, -1);
-
-        if(count == t->group->size)
-        {
-            laik_aseq_updateGroup(as, subgroup, groupInfo.primarys, groupInfo.num_islands, -1);
-            for(int i = 0; i < groupInfo.size; ++i) tmp[i] = i;
-            laik_aseq_addSecondaryGroup(as, subgroup, tmp, groupInfo.size, chain_idx);
-            continue;
-        }
 
         for(int i = 0; i < count; ++i)
         {
@@ -632,4 +635,14 @@ bool onSameIsland(Laik_ActionSeq* as, int inputgroup, int outputgroup, int chain
     int rankO = laik_aseq_taskInGroup(as, outputgroup, 0, chain_idx - 1);
 
     return groupInfo.colours[rankI] == groupInfo.colours[rankO];
+}
+
+void createBuffer(size_t size){
+    if(size < 1) return;
+    shmem_cpybuf_alloc(groupInfo.cpyBuf, COPY_BUF_SIZE);
+}
+
+void cleanupBuffer()
+{
+    if(groupInfo.cpyBuf->ptr) shmem_cpybuf_delete(groupInfo.cpyBuf);
 }

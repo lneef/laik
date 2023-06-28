@@ -5,15 +5,11 @@
 
 #include <stdlib.h>
 
-struct cpyBuf* shmem_cpybuf_obtain(size_t size)
+struct cpyBuf* shmem_cpybuf_obtain()
 {
-    int shmid;
-    void* ptr = shmem_alloc(size, &shmid);
-
     struct cpyBuf* buffer = malloc(sizeof(struct cpyBuf));
-    buffer -> shmid = shmid;
-    buffer -> ptr = ptr;
-    buffer -> size = size;
+    buffer -> ptr = NULL;
+    buffer -> size = 0;
 
     return buffer;
 }
@@ -27,9 +23,7 @@ void shmem_cpybuf_alloc(struct cpyBuf* buf, size_t size){
     }
     else 
     {
-        size = (size / buf->size) + 1;
-        size *= buf->size;
-        shmem_free( buf->ptr);
+        if(buf->ptr) shmem_free( buf->ptr);
         int shmid;
         buf -> ptr = shmem_alloc(size, &shmid);
         buf -> size = size;
@@ -39,6 +33,6 @@ void shmem_cpybuf_alloc(struct cpyBuf* buf, size_t size){
 
 void shmem_cpybuf_delete(struct cpyBuf* buf){
     shmem_free(buf->ptr);
-
-    free(buf);
+    buf->ptr = NULL;
+    buf->size = 0;
 }
