@@ -22,6 +22,9 @@
 #include <stdbool.h>  // for bool
 #include <stdint.h>   // for uint64_t
 
+#define LEX_IDENTIFIER "lex"
+#define NAME_LEN 10
+
 // kinds of data types supported by Laik
 typedef enum _Laik_TypeKind {
     LAIK_TK_None = 0,
@@ -141,6 +144,7 @@ struct _Laik_Mapping {
     Laik_Range requiredRange; // sub-range (global) containing used ranges
     uint64_t count, allocCount; // number of elements in req/allocRange
 
+    char* header; // memory header
     char* start; // start address of mapping
     char* base; // address matching requiredRange.from (usually same as start)
     uint64_t capacity; // number of bytes allocated

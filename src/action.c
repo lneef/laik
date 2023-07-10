@@ -2370,8 +2370,8 @@ bool laik_aseq_replaceWithAllReduce(Laik_ActionSeq* as)
         // TODO: LAIK_AT_MapGroupReduce
         case LAIK_AT_GroupReduce:
         {
-            int inCount = laik_trans_groupCount(t, ba->inputGroup);
-            int outCount = laik_trans_groupCount(t, ba->outputGroup);
+            int inCount = laik_aseq_groupCount(as, ba->inputGroup, -1);
+            int outCount = laik_aseq_groupCount(as, ba->outputGroup, -1);
             if (inCount == allSize) {
                 if (outCount == allSize) {
                     laik_aseq_addReduce(as, a->round, ba->fromBuf, ba->toBuf,
@@ -2379,7 +2379,7 @@ bool laik_aseq_replaceWithAllReduce(Laik_ActionSeq* as)
                     changed = true;
                     continue;
                 }
-                else if (laik_trans_groupCount(t, ba->outputGroup) == 1) {
+                else if (laik_aseq_groupCount(as, ba->outputGroup, -1) == 1) {
                     int root = laik_trans_taskInGroup(t, ba->outputGroup, 0);
                     laik_aseq_addReduce(as, a->round, ba->fromBuf, ba->toBuf,
                                         ba->count, root, ba->redOp);

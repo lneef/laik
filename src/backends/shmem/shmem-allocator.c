@@ -1,10 +1,10 @@
 
 #include "backends/shmem/shmem-allocator.h"
 #include "laik.h"
-#include "laik/core.h"
 #include "shmem.h"
 
 #include <stddef.h>
+#include <sys/cdefs.h>
 #include <sys/shm.h>
 #include <stdlib.h>
 #include <string.h>
@@ -51,7 +51,8 @@ static int get_shmid_and_destroy(void *ptr, int *shmid)
     return SHMEM_SEGMENT_NOT_FOUND;
 }
 
-void deleteAllocatedSegments(void){
+void deleteAllocatedSegments(__attribute_maybe_unused__ int sig){
+
     struct shmSeg *l = shmList.next;
     while(l != NULL){
         shmdt(l->ptr);

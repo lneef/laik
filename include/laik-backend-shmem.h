@@ -19,16 +19,14 @@
 #define LAIK_BACKEND_SHMEM_H
 
 #include "laik.h"
+#include "laik/core.h"
 
 // SHMEM backend.
 
 // create a LAIK instance for this backend.
-// if application already called MPI_Init, pass 0 for args
-// returns the same object if called multiple times
-Laik_Instance* laik_init_shmem(int* argc, char*** argv);
-
-int laik_shmem_secondary_init(Laik_Instance*, int primaryRank, int primarySize, int (*send)(int *, int, int),
-                         int (*recv)(int *, int, int));
+// if locations is NULL, all ranks are one the islands
+int laik_shmem_secondary_init(Laik_Instance*, int primaryRank, int primarySize, int* locations, int** newLocations, int** ranks,  
+                                int (*send)(int *, int, int), int (*recv)(int *, int, int));
 
 
 #endif // LAIK_BACKEND_SHMEM_H

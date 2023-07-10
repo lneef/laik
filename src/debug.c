@@ -21,6 +21,7 @@
 */
 
 #include "laik-internal.h"
+#include "laik/action.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -129,6 +130,24 @@ void laik_log_DataFlow(Laik_DataFlow flow)
     case LAIK_DF_Preserve: laik_log_append("preserve"); break;
     case LAIK_DF_Init:     laik_log_append("init"); break;
     }
+}
+void laik_log_TaskGroupAS(Laik_ActionSeq* as, int group, int chain_idx)
+{
+    if (group == -1) {
+        laik_log_append("(all)");
+        return;
+    }
+
+    assert(group < as->subgroupCount);
+    TaskGroupAS tg = as->subgroups[group];
+
+    int offset = tg.offset[chain_idx + 1];
+    laik_log_append("(");
+    for(int i = 0; i < tg.count[chain_idx + 1]; i++) {
+        if (i > 0) laik_log_append(",");
+        laik_log_append("T%d", tg.tasks[offset + i]);
+    }
+    laik_log_append(")");
 }
 
 void laik_log_TransitionGroup(Laik_Transition* t, int group)
@@ -592,9 +611,10 @@ void laik_log_Action(Laik_Action* a, Laik_ActionSeq* as)
         laik_log_append(": count %d, from %p, to %p, input ",
                         ba->count,
                         (void*) ba->fromBuf, (void*) ba->toBuf);
-        laik_log_TransitionGroup(tc->transition, ba->inputGroup);
+        //parts of subgroups covered by sceondaries only relevant for GroupReduce
+        laik_log_TaskGroupAS(as, ba->inputGroup, -1);
         laik_log_append(", output ");
-        laik_log_TransitionGroup(tc->transition, ba->outputGroup);
+        laik_log_TaskGroupAS(as, ba->outputGroup, -1);
         break;
 
     case LAIK_AT_RBufGroupReduce:
@@ -706,7 +726,7 @@ void laik_log_Action(Laik_Action* a, Laik_ActionSeq* as)
 
     default:
         if (as->backend && as->backend->log_action)
-            if ((*as->backend->log_action)(as->backend, a)) return;
+            if ((*as->backend->log_action)(as->backend, as, a)) return;
 
         laik_log(LAIK_LL_Panic,
                  "laik_log_Action: unknown action %d", a->type);

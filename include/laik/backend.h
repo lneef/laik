@@ -27,7 +27,7 @@
 #include <laik.h>     // for Laik_Transition, Laik_Data, Laik_Instance, Laik...
 #include <stdbool.h>  // for bool
 #include "definitions.h" // for maximal number of secondaries
-
+#include "laik/core.h"
 
 // LAIK communication back-end
 // there is no generic initialization function; laik_init() knowns
@@ -66,7 +66,7 @@ struct _Laik_Backend {
   void (*sync)(const Laik_Backend*, Laik_KVStore* kvs);
 
   // log backend-specific action, return true if handled (see laik_log_Action)
-  bool (*log_action)(const Laik_Backend*, Laik_Action* a);
+  bool (*log_action)(const Laik_Backend*, Laik_ActionSeq* as, Laik_Action* a);
 
   // ensure progress in backend, can be NULL
   void (*make_progress)(const Laik_Backend*);
@@ -92,12 +92,33 @@ struct _Laik_Backend {
   unsigned char chain_length;
 };
 
+struct _Laik_Secondary_Group
+{
+  // my rank
+  int rank;
+
+  // size of the partition I am part of
+  int size;
+
+  // identifier of my partition
+  int colour;
+
+  // divsion of the world group
+  int* divsion;
+
+  // mapping of primary to secondary ranks
+  int* secondaryRanks;
+};
+
 struct _Laik_Secondary {
   //index in chain of secondary backends
   unsigned chain_idx;
 
+  // My group
+  Laik_Secondary_Group* groupInfo;
+
   // delete all buffers allocated by secondary backend
-  void (*laik_secondary_finalize)();
+  void (*laik_secondary_finalize)(const Laik_Secondary*);
 
   //prepare action sequence, i.e. replace generic laik actions with backend specific actions
   bool (*laik_secondary_prepare)(const Laik_Secondary*, Laik_ActionSeq *);
@@ -106,12 +127,21 @@ struct _Laik_Secondary {
   bool (*laik_secondary_exec)(const Laik_Secondary*, Laik_ActionSeq *, Laik_Action *);
 
   //cleanup temporary buffers
-  void (*laik_secondary_cleanup)();
+  void (*laik_secondary_cleanup)(const Laik_Secondary*);
 
-  bool (*laik_secondary_log_action)(Laik_Action *);
+  //log secondary specific actions
+  bool (*laik_secondary_log_action)(const Laik_Secondary*, Laik_ActionSeq*, Laik_Action *);
+
+  //update secondary groups
+  void (*laik_secondary_update_group)(const Laik_Secondary*, Laik_Group*);
 };
 
+void laik_secondaries_cleanup(const Laik_Backend* backend);
 
+void laik_secondaries_update_group(const Laik_Backend*, Laik_Group*);
 
+bool laik_secondaries_prepare(const Laik_Backend* backend, Laik_ActionSeq* as);
+
+void laik_secondaries_finalize(const Laik_Backend* backend);
 
 #endif // LAIK_BACKEND_H

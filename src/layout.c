@@ -16,6 +16,7 @@
  */
 
 #include "laik-internal.h"
+#include "laik/data.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -57,8 +58,8 @@ void laik_layout_copy_gen(Laik_Range* range,
 {
     Laik_Layout* fromLayout = from->layout;
     Laik_Layout* toLayout = to->layout;
-    unsigned int elemsize = from->data->elemsize;
-    assert(elemsize == to->data->elemsize);
+    unsigned int elemsize = to->data->elemsize;
+    //assert(elemsize == to->data->elemsize);
 
     if (laik_log_begin(1)) {
         laik_log_append("generic copy of range ");
@@ -237,7 +238,9 @@ void laik_init_layout(Laik_Layout* l, int dims, int map_count, uint64_t count,
                       laik_layout_describe_t describe,
                       laik_layout_pack_t pack,
                       laik_layout_unpack_t unpack,
-                      laik_layout_copy_t copy)
+                      laik_layout_copy_t copy,
+                      laik_layout_alloc_t alloc,
+                      laik_layout_free_t free)
 {
     l->dims = dims;
     l->map_count = map_count;
@@ -249,6 +252,7 @@ void laik_init_layout(Laik_Layout* l, int dims, int map_count, uint64_t count,
 
     // for testing, LAIK_LAYOUT_GENERIC enforces use of generic variants
     if (getenv("LAIK_LAYOUT_GENERIC")) {
+        laik_log(2, "%s", "gen");
         copy = 0;
         pack = 0;
         unpack = 0;
@@ -270,6 +274,8 @@ void laik_init_layout(Laik_Layout* l, int dims, int map_count, uint64_t count,
     l->unpack = unpack;
     l->describe = describe;
     l->copy = copy;
+    l->alloc = alloc;
+    l->free = free;
 }
 
 

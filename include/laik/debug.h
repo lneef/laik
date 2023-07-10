@@ -25,7 +25,6 @@
 #include "action.h"  // for Laik_Action
 
 char* laik_at_str(Laik_ActionType t);
-
 void laik_log_IntList(int len, int* list);
 void laik_log_PrettyInt(uint64_t v);
 void laik_log_Space(Laik_Space* spc);
@@ -34,6 +33,7 @@ void laik_log_Range(Laik_Range* range);
 void laik_log_Reduction(Laik_ReductionOperation op);
 void laik_log_DataFlow(Laik_DataFlow flow);
 void laik_log_Transition(Laik_Transition* t, bool showActions);
+void laik_log_TaskGroupAS(Laik_ActionSeq* as, int group, int chain_idx);
 void laik_log_RangeList(Laik_RangeList* list);
 void laik_log_RangeFilter(Laik_RangeFilter*);
 void laik_log_Partitioning(Laik_Partitioning* p);

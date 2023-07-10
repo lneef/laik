@@ -18,10 +18,14 @@
 #ifndef LAIK_DATA_H
 #define LAIK_DATA_H
 
+#include <stdalign.h>
 #include <stdbool.h>  // for bool
+#include <stddef.h>
 #include <stdint.h>   // for int64_t, uint64_t
 #include <stdlib.h>   // for size_t
+#include <string.h>
 #include "core.h"     // for Laik_Group, Laik_Instance
+#include "definitions.h"
 #include "space.h"    // for Laik_DataFlow, Laik_Partitioning
 #include "action.h"
 
@@ -68,6 +72,8 @@ typedef struct _Laik_Data Laik_Data;
 
 // a serialisation order of a LAIK container (for address offsets)
 typedef struct _Laik_Layout Laik_Layout;
+
+typedef struct _Laik_Layout_Memory_Header Laik_Layout_Memory_Header ;
 
 /**
  * Define a LAIK container shared by a LAIK task group.
@@ -327,15 +333,27 @@ typedef unsigned int (*laik_layout_unpack_t)(
     Laik_Mapping* m, Laik_Range* r,
     Laik_Index* idx, char* buf, unsigned int size);
 
+typedef char* (*laik_layout_alloc_t)(Laik_Mapping* m, int n);
+
+typedef void (*laik_layout_free_t)(Laik_Mapping*m , int n);
+
 // return string describing the layout (for debug output)
 typedef char* (*laik_layout_describe_t)(Laik_Layout*);
 
+// header for memory segments
+struct _Laik_Layout_Memory_Header {
+    size_t size;
+    char name[10];
+};
+
 // public as it is the header of custom layouts
 struct _Laik_Layout {
+    char name[10];
+    size_t header_size;
     int dims;
-    int map_count; // number of allocated mappings required for this layout
+    int map_count; // number of allocated mappings for this layout
     uint64_t count; // number of covered indexes
-
+    
     laik_layout_section_t section;
     laik_layout_mapno_t mapno;
     laik_layout_offset_t offset;
@@ -344,6 +362,10 @@ struct _Laik_Layout {
     laik_layout_pack_t pack;
     laik_layout_unpack_t unpack;
     laik_layout_copy_t copy;
+
+    laik_layout_alloc_t alloc;
+    laik_layout_free_t free;
+
 };
 
 void laik_init_layout(Laik_Layout* l, int dims, int map_count, uint64_t count,
@@ -354,7 +376,9 @@ void laik_init_layout(Laik_Layout* l, int dims, int map_count, uint64_t count,
                       laik_layout_describe_t describe,
                       laik_layout_pack_t pack,
                       laik_layout_unpack_t unpack,
-                      laik_layout_copy_t copy);
+                      laik_layout_copy_t copy,
+                      laik_layout_alloc_t alloc,
+                      laik_layout_free_t free);
 
 // (slow) generic copy just using offset function from layout interface
 void laik_layout_copy_gen(Laik_Range* range,
@@ -371,6 +395,7 @@ Laik_Layout* laik_new_layout_lex(int n, Laik_Range* ranges);
 // return stride for dimension <d> in lex layout mapping <n>
 uint64_t laik_layout_lex_stride(Laik_Layout* l, int n, int d);
 
+Laik_Layout* laik_layout_adapter_lex(Laik_Range* range, Laik_Layout_Memory_Header* lh);
 
 //----------------------------------
 // Allocator interface
@@ -419,5 +444,29 @@ Laik_Allocator* laik_new_allocator_def();
 // predefined allocator
 extern Laik_Allocator *laik_allocator_def;
 
+// key value store to maintain mapping of layout names to layouts
+typedef Laik_Layout* (*laik_layout_create_t)(Laik_Range* range, Laik_Layout_Memory_Header* lh);
+typedef struct _Laik_Layout_Store_Entry Laik_Layout_Store_Entry;
+struct _Laik_Layout_Store_Entry{
+    char name[10];
+    laik_layout_create_t adapter;
+};
+
+typedef struct _Laik_Layout_Store Laik_Layout_Store;
+struct _Laik_Layout_Store{
+    Laik_Layout_Store_Entry* kv;
+    int size;
+    int full;
+};
+
+void laik_layout_register(Laik_Instance* inst, char* name, laik_layout_create_t fun);
+
+Laik_Layout* laik_layout_get(Laik_Layout_Store* adapters, Laik_Range* range, Laik_Layout_Memory_Header* lh);
+
+void laik_layout_store_cleanup(Laik_Instance* inst);
+
+Laik_Layout_Store* laik_layout_store_create(void);
 
 #endif // LAIK_DATA_H
+
+

@@ -16,6 +16,8 @@
  */
 
 
+#include "laik/data-internal.h"
+#include "laik/data.h"
 #include <laik-internal.h>
 #include <laik-backend-mpi.h>
 #include <laik-backend-shmem.h>
@@ -54,15 +56,6 @@ Laik_Instance* laik_init(int* argc, char*** argv)
         // default to MPI if available, or if explicitly wanted
         if ((override == 0) || (strcmp(override, "mpi") == 0)) {
             inst = laik_init_mpi(argc, argv);
-        }
-    }
-#endif
-
-#ifdef USE_SHMEM
-    if (inst == 0) {
-        // default to SHMEM if available, or if explicitly wanted
-        if ((override == 0) || (strcmp(override, "shmem") == 0)) {
-            inst = laik_init_shmem(argc, argv);
         }
     }
 #endif
@@ -129,6 +122,9 @@ Laik_Instance* laik_init(int* argc, char*** argv)
             while(wait) { usleep(10000); }
         }
     }
+    inst -> layouts = laik_layout_store_create();
+
+    laik_layout_register(inst, LEX_IDENTIFIER, laik_layout_adapter_lex);
 
     return inst;
 }
@@ -140,8 +136,22 @@ void laik_init_secondaries(Laik_Instance* inst, int primaryRank, int primarySize
 
     if(sec == NULL) return;
 
-    if(!strcmp(sec,"SHMEM" ))
-        laik_shmem_secondary_init(inst,  primaryRank, primarySize, send, recv);
+    char* name, *saveptr;
+    name = strtok_r(sec, ",", &saveptr);
+    
+
+    int *loc = NULL;
+    int *newLoc;
+    int* ranks = inst->world->locationid;
+    
+    for(;name!=NULL;)
+    {           
+        if(!strcmp(name,"SHMEM" ))
+            laik_shmem_secondary_init(inst, primaryRank, primarySize, loc, &newLoc, &ranks, send, recv);
+
+        loc = newLoc;
+        name = strtok_r(NULL, ",", &saveptr);
+    }
 }
 
 
@@ -202,6 +212,7 @@ void laik_finalize(Laik_Instance* inst)
     laik_close_profiling_file(inst);
     laik_free_profiling(inst);
     free(inst->control);
+    laik_layout_store_cleanup(inst);
 
     laik_log_cleanup(inst);
 }

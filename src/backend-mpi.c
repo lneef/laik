@@ -15,7 +15,6 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-#include "laik/core.h"
 # ifdef USE_MPI
 #include "laik-internal.h"
 #include "laik-backend-mpi.h"
@@ -38,7 +37,7 @@ static void laik_mpi_prepare(const Laik_Backend* this, Laik_ActionSeq*);
 static void laik_mpi_cleanup(const Laik_Backend* this, Laik_ActionSeq*);
 static void laik_mpi_exec(const Laik_Backend* this, Laik_ActionSeq* as);
 static void laik_mpi_updateGroup(const Laik_Backend* this, Laik_Group*);
-static bool laik_mpi_log_action(const Laik_Backend* this, Laik_Action* a);
+static bool laik_mpi_log_action(const Laik_Backend* this, Laik_ActionSeq* as, Laik_Action* a);
 static void laik_mpi_sync(const Laik_Backend* this, Laik_KVStore* kvs);
 
 
@@ -175,7 +174,7 @@ static void laik_mpi_addMpiWait(Laik_ActionSeq *as, int round, int req_id)
 }
 
 static
-bool laik_mpi_log_action(const Laik_Backend* this, Laik_Action* a)
+bool laik_mpi_log_action(const Laik_Backend* this, Laik_ActionSeq* as, Laik_Action* a)
 {
     (void)this;
     switch(a->type) {
@@ -209,7 +208,7 @@ bool laik_mpi_log_action(const Laik_Backend* this, Laik_Action* a)
     }
 
     default:
-        return this->chain[a->chain_idx]->laik_secondary_log_action(a);
+        return this->chain[a->chain_idx]->laik_secondary_log_action(this->chain[a->chain_idx], as, a);
     }
     return true;
 }
@@ -432,9 +431,8 @@ void laik_mpi_finalize(const Laik_Backend* this, Laik_Instance* inst)
 {
     assert(inst == mpi_instance);
 
-    for(int i = 0; i < this -> chain_length; ++i)
-        this->chain[i]->laik_secondary_finalize();
-    
+    laik_secondaries_finalize(this);
+
     if (mpiData(mpi_instance)->didInit)
     {
         int err = MPI_Finalize();
@@ -1133,16 +1131,19 @@ void laik_mpi_prepare(const Laik_Backend* this, Laik_ActionSeq* as)
     // mark as prepared by MPI backend: for MPI-specific cleanup + action logging
     as->backend = &laik_backend_mpi;
 
-    laik_trans_movetoAS(as);
-
-
     bool changed = laik_aseq_splitTransitionExecs(as);
     laik_log_ActionSeqIfChanged(changed, as, "After splitting transition execs");
     if (as->actionCount == 0)
     {
         laik_aseq_calc_stats(as);
         return;
-    }
+    } 
+    
+    changed = laik_aseq_sort_2phases(as);
+    laik_log_ActionSeqIfChanged(changed, as, "After sorting for deadlock avoidance");
+
+    changed = laik_secondaries_prepare(this, as); 
+    laik_log_ActionSeqIfChanged(changed, as, "After replacing with shmem calls");
 
     changed = laik_aseq_flattenPacking(as);
     laik_log_ActionSeqIfChanged(changed, as, "After flattening actions");
@@ -1155,16 +1156,8 @@ void laik_mpi_prepare(const Laik_Backend* this, Laik_ActionSeq* as)
         laik_log_ActionSeqIfChanged(changed, as, "After all-reduce detection");
     }
     
-    changed = laik_aseq_sort_2phases(as);
+   
     // changed = laik_aseq_sort_rankdigits(as);
-    laik_log_ActionSeqIfChanged(changed, as, "After sorting for deadlock avoidance");
-
-    changed = false;
-    for(int i = this->chain_length - 1; i > -1; --i)
-    {
-        changed |= this->chain[i]->laik_secondary_prepare(this->chain[i], as);
-    }   
-    laik_log_ActionSeqIfChanged(changed, as, "After replacing with shmem calls");
 
     changed = laik_aseq_combineActions(as);
     laik_log_ActionSeqIfChanged(changed, as, "After combining actions 1");
@@ -1223,8 +1216,7 @@ static void laik_mpi_cleanup(const Laik_Backend* this, Laik_ActionSeq* as)
         laik_log(1, "  freed MPI_Request array with %d entries", aa->count);
     }
 
-    for(int i = 0; i < this->chain_length; ++i)
-        this->chain[i]->laik_secondary_cleanup();
+    laik_secondaries_cleanup(this);
 
     laik_aseq_removefromAS(as);
 

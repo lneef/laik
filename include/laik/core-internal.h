@@ -22,6 +22,7 @@
 #include <stdbool.h>      // for bool
 #include <sys/time.h>     // for struct timeval
 #include "definitions.h"  // for MAX_DATAS, MAX_GROUPS, MAX_MAPPINGS
+#include "laik/core.h"
 
 // dynamically generated revision/opt flags information, in info.c
 void laik_log_append_info(void);
@@ -88,6 +89,7 @@ struct _Laik_Instance {
     void* backend_data;
 
     Laik_Space* firstSpaceForInstance;
+    Laik_Layout_Store* layouts;
 
     int group_count, data_count, mapping_count;
     Laik_Group* group[MAX_GROUPS];

@@ -16,6 +16,10 @@
  */
 
 #include "laik-internal.h"
+#include "laik/core.h"
+#include "laik/data.h"
+#include "laik/space-internal.h"
+#include "laik/space.h"
 
 // for string.h to declare strdup
 #define __STDC_WANT_LIB_EXT2__ 1
@@ -26,7 +30,6 @@
 #include <string.h>
 #include <stdio.h>
 #include "backends/shmem/shmem-manager.h"
-
 
 // provided allocators
 Laik_Allocator *laik_allocator_def = 0;
@@ -267,6 +270,7 @@ void initMapping(Laik_Mapping* m, Laik_Data* d)
     m->capacity = 0;
     m->start = 0;
     m->base = 0;
+    m->start = 0;
 
     // use default allocater of container to allocate memory
     m->allocator = d->allocator;
@@ -383,12 +387,13 @@ Laik_MappingList* prepareMaps(Laik_Data* d, Laik_Partitioning* p)
         m->count = laik_range_size(&(ranges[mapNo]));
         m->layout = layout;       // all maps use same layout
         m->layoutSection = mapNo; // but different sections of it
+        m->header = 0;
 
         if ((mapNo == 0) && (d->map0_base != 0)) {
+            laik_map_set_allocation(m, d->map0_base, d->map0_size, 0);
             laik_log(1, "  using provided memory (%lld bytes at %p with layout %s)",
                      (unsigned long long int) d->map0_size, d->map0_base,
                      layout->describe(m->layout));
-            laik_map_set_allocation(m, d->map0_base, d->map0_size, 0);
         }
     }
 
@@ -422,13 +427,16 @@ uint64_t freeMap(Laik_Mapping* m, Laik_Data* d, Laik_SwitchStat* ss)
 
     // if allocator is given, use it to free memory
     uint64_t freed = 0;
+    m->layout->free(m, m->layoutSection);
     if (m->allocator) {
         laik_switchstat_free(ss, m->capacity);
-        freed = m->capacity;
+        freed = m->capacity;        
 
-        assert(m->allocator->free);
-        (m->allocator->free)(d, m->start);
+        //free header(points to begin of section)
+        //(m->allocator->free)(d, m->header);
     }
+
+    m->header = 0;
     m->base = 0;
     m->start = 0;
 
@@ -450,7 +458,7 @@ uint64_t freeMappingList(Laik_MappingList* ml, Laik_SwitchStat* ss)
         Laik_Mapping* m = &(ml->map[i]);
         assert(m != 0);
 
-        if (ml->layout != m->layout) free(m->layout);
+        if (ml->layout != m->layout) m->layout->free(m, m->layoutSection);
         freed += freeMap(m, m->data, ss);
     }
 
@@ -514,7 +522,8 @@ void laik_allocateMap(Laik_Mapping* m, Laik_SwitchStat* ss)
     Laik_Allocator* a = m->allocator;
     assert(a != 0);
     assert(a->malloc != 0);
-    char* start = (a->malloc)(d, size);
+    char* start = m->layout->alloc(m, m->layoutSection);
+    //(a->malloc)(d, size);
 
     if (!start) {
         laik_log(LAIK_LL_Panic,
@@ -535,9 +544,9 @@ void laik_allocateMap(Laik_Mapping* m, Laik_SwitchStat* ss)
 void laik_data_copy(Laik_Range* range,
                     Laik_Mapping* from, Laik_Mapping* to)
 {
-    if (from->layout->copy && (from->layout->copy == to->layout->copy)) {
+    if (to->layout->copy && !strcmp(from->layout->name, to->layout->name)) {
         // same layout providing specific copy implementation: use it
-        (from->layout->copy)(range, from, to);
+        (to->layout->copy)(range, from, to);
         return;
     }
 
@@ -547,7 +556,7 @@ void laik_data_copy(Laik_Range* range,
 }
 
 static
-void copyMaps(Laik_Transition* t,
+void    copyMaps(Laik_Transition* t,
               Laik_MappingList* toList, Laik_MappingList* fromList,
               Laik_SwitchStat* ss)
 {
@@ -617,6 +626,7 @@ void initEmbeddedMapping(Laik_Mapping* toMap, Laik_Mapping* fromMap)
 
     // take over allocation into new mapping descriptor
     toMap->start = fromMap->start;
+    toMap->header = fromMap->header;
     toMap->allocatedRange = fromMap->allocatedRange;
     toMap->allocCount = fromMap->allocCount;
     toMap->capacity = fromMap->capacity;
@@ -771,7 +781,7 @@ Laik_ActionSeq* createTransASeq(Laik_Data* d, Laik_Transition* t,
     int tid = laik_aseq_addTContext(as, d, t, fromList, toList);
     laik_aseq_addTExec(as, tid);
     laik_aseq_activateNewActions(as);
-
+    laik_trans_movetoAS(as);
     return as;
 }
 
@@ -1576,7 +1586,6 @@ Laik_Mapping* laik_global2maplocal_1d(Laik_Data* d, int64_t gidx,
     return 0;
 }
 
-
 int64_t laik_local2global_1d(Laik_Data* d, uint64_t off)
 {
     assert(d->space->dims == 1);
@@ -1670,6 +1679,8 @@ Laik_Allocator* laik_get_allocator(Laik_Data* d)
     return d->allocator;
 }
 
+
+
 // returns an allocator with default policy LAIK_MP_NewAllocOnRepartition
 Laik_Allocator* laik_new_allocator_def()
 {
@@ -1683,3 +1694,73 @@ Laik_Allocator* laik_new_allocator_def()
 
     return a;
 }
+
+//---------------------------------------------------------------------------------------------
+// layout store to work with layout header
+
+int entrycmp(const void* v1, const void* v2)
+{
+    Laik_Layout_Store_Entry* l1 = (Laik_Layout_Store_Entry*) v1;
+    Laik_Layout_Store_Entry* l2 = (Laik_Layout_Store_Entry*) v2;
+    return strcmp(l1->name, l2->name);
+}
+
+Laik_Layout* laik_layout_get(Laik_Layout_Store* store, Laik_Range* range, Laik_Layout_Memory_Header* lh)
+{
+    Laik_Layout_Store_Entry* entry = bsearch(lh->name, store->kv, store->full, sizeof(Laik_Layout_Store_Entry), entrycmp);
+    assert(entry);
+    return entry->adapter(range, lh);
+}
+
+void laik_layout_register(Laik_Instance* inst, char* name, laik_layout_create_t fun)
+{
+    Laik_Layout_Store* store = inst->layouts;
+    if(store->full == store->size)
+    {
+        store->kv = realloc(store->kv, 2 * store->size * sizeof(Laik_Layout_Store_Entry));
+        store-> size = 2 * store->size;
+    }
+    int l = 0, r = store->full -1;
+
+    while(l <= r)
+    {
+        int mid = (r - l) / 2 + l;
+        int res = strcmp(name, store->kv[mid].name);
+
+        if(res < 0)
+            r = mid - 1;
+        else
+            l = mid + 1;
+    }
+    
+    if (l < store->full) memmove(&store->kv[l + 1], &store->kv[l], (store->full - l) * sizeof(Laik_Layout_Store_Entry));
+    Laik_Layout_Store_Entry* e = &store->kv[l];
+    int strl = strlen(name);
+    assert(strl < 10);
+    memcpy(e->name, name, strl + 1);
+    e->adapter = fun;
+    ++store->full;
+}
+
+Laik_Layout_Store* laik_layout_store_create(void)
+{
+    #define INIT_SIZE 4
+    Laik_Layout_Store* store = malloc(sizeof(Laik_Layout_Store));
+    store -> full = 0;
+    store -> size = INIT_SIZE;
+    store -> kv = malloc(INIT_SIZE * sizeof(Laik_Layout_Store_Entry));
+    return store;
+}
+
+void laik_layout_store_cleanup(Laik_Instance* inst)
+{
+    free(inst->layouts->kv);
+    free(inst->layouts);
+}
+
+
+
+
+
+
+

@@ -20,7 +20,6 @@
 
 #include "definitions.h"
 #include "laik.h"         // for Laik_Instance, Laik_Group
-#include "laik/definitions.h"
 
 // Action sequences are used in the public LAIK API as abstraction
 // for compound communication requests, e.g. consisting of multiple
@@ -230,7 +229,7 @@ struct _Laik_ActionSeq {
     int ceCount;
     int ceRanges;
 
-    // subgroups corresponding to reductions  
+    // subgroups for group reductions  
     int subgroupCount;
     TaskGroupAS* subgroups;
 

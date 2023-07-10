@@ -1,8 +1,25 @@
+/* This file is part of the LAIK parallel container library.
+ * Copyright (c) 2023 Lukas Neef <lukas.neef@tum.de>
+ *
+ * LAIK is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation, version 3.
+ *
+ * LAIK is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
 
 #include <stdalign.h>
 #include <stddef.h>
 #include <stdlib.h>
+
 #include "backends/shmem/shmem.h"
+#include "laik.h"
 #include "shmem-allocator.h"
 #include "shmem-manager.h"
 #include <sys/shm.h>
@@ -57,7 +74,8 @@ void* def_shmem_malloc(Laik_Data* d, size_t size){
     
     (void) d; // not used in this implementation of interface
     int shmid;
-    return shmem_alloc(size, &shmid);
+    void* ptr = shmem_alloc(size, &shmid);
+    return ptr;
 }
 
 

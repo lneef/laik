@@ -17,6 +17,7 @@
 
 #include "laik-internal.h"
 #include "laik/action.h"
+#include "laik/debug.h"
 #include "laik/definitions.h"
 #include "laik/space-internal.h"
 #include "laik/space.h"
@@ -79,6 +80,7 @@ void laik_sub_index(Laik_Index* res, const Laik_Index* src1, const Laik_Index* s
 
 bool laik_index_isEqual(int dims, const Laik_Index* i1, const Laik_Index* i2)
 {
+    laik_log_Index(dims, i1);
     if (i1->i[0] != i2->i[0]) return false;
     if (dims == 1) return true;
 
@@ -1503,7 +1505,7 @@ do_calc_transition(Laik_Space* space,
                             range = laik_range_intersect(&(fromRL->trange[o2].range),
                                                        &(toRL->trange[o1].range));
                             if (range == 0) continue;
-
+                            laik_log_Range(range);
                             appendRecvTOp(range, o1 - toRL->off[myid],
                                           toRL->trange[o1].mapNo, task);
                         }
@@ -1537,6 +1539,7 @@ do_calc_transition(Laik_Space* space,
                                                    &(toRL->trange[o2].range));
                         if (range == 0) continue;
 
+                        laik_log_Range(range);
                         appendSendTOp(range, o1 - fromRL->off[myid],
                                       fromRL->trange[o1].mapNo, task);
                     }
