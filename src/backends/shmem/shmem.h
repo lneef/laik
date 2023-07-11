@@ -34,26 +34,52 @@
 
 #define SHMEM_MAX_ERROR_STRING 100
 
+// some definitions for the shared memory backend
+typedef enum DataSpec{
+    PACK, MAP
+} DataSpec;
+
+struct commHeader{
+    DataSpec spec;
+    int receiver;
+    int shmid;
+    int count;
+    Laik_Range range;
+};
+
 #pragma pack(push, 1)
-typedef struct _Shmem_Secondary_Group
+typedef struct _Laik_Shmem_Comm
 {
-    Laik_Secondary_Group info;
+    // my rank
+    int rank;
 
-    int headerShmid;
+    // size of the partition I am part of
+    int size;
 
+    // identifier of my partition
+    int colour;
+
+    // divsion of the world group
+    int* divsion;
+
+     // mapping of primary to secondary ranks
+    int* secondaryRanks;
+
+    // number of shared memory islands
     int numIslands;
 
+    // rank numbers of the processes in this subgroup
     int *primaryRanks;
+
+    //chosen copy scheme
+    int (*send)(void*, int, int, int, struct _Laik_Shmem_Comm*);
     
-    struct cpyBuf* cpyBuf;
-
-    int (*send)(void*, int, int, int, struct _Shmem_Secondary_Group*);
-    
-    int (*sendP)(int *, int, int);
-    int (*recvP)(int *, int, int);
+    //send and recv for integers (implemented by primary)
+    int (*sendP)(int *, int, int, void*);
+    int (*recvP)(int *, int, int, void*);
 
 
-}Shmem_Secondary_Group;
+}Laik_Shmem_Comm;
 
 #pragma pack(pop)
 
@@ -62,48 +88,48 @@ typedef struct _Shmem_Secondary_Group
 
 int shmem_error_string(int error, char *str);
 
-int shmem_secondary_init(Shmem_Secondary_Group* sg, int primaryRank, int primarySize, int* locations, int** newLocations, int** ranks, 
-                            int (*send)(int *, int, int), int (*recv)(int *, int, int));
-int shmem_comm_size(Shmem_Secondary_Group* sg, int *sizePtr);
+int shmem_secondary_init(Laik_Shmem_Comm* sg, int primaryRank, int primarySize, int* locations, int** newLocations, int** ranks, 
+                            int (*send)(int *, int, int, void*), int (*recv)(int *, int, int, void*), void* backend_data);
+int shmem_comm_size(Laik_Shmem_Comm* sg, int *sizePtr);
 
-int shmem_comm_rank(Shmem_Secondary_Group* sg, int *rankPtr);
+int shmem_comm_rank(Laik_Shmem_Comm* sg, int *rankPtr);
 
-int shmem_comm_colour(Shmem_Secondary_Group* sg, int *colourPtr);
+int shmem_comm_colour(Laik_Shmem_Comm* sg, int *colourPtr);
 
-int shmem_get_colours(Shmem_Secondary_Group* sg, int **buf);
+int shmem_get_colours(Laik_Shmem_Comm* sg, int **buf);
 
-int shmem_get_numIslands(Shmem_Secondary_Group* sg, int *num);
+int shmem_get_numIslands(Laik_Shmem_Comm* sg, int *num);
 
-int shmem_get_secondaryRanks(Shmem_Secondary_Group* sg, int **buf);
+int shmem_get_secondaryRanks(Laik_Shmem_Comm* sg, int **buf);
 
-int shmem_finalize(Shmem_Secondary_Group* sg);
+int shmem_finalize();
 
 //------------------------------------------------------------------------------
 // peer to peer communication actions
 
-int shmem_send(void *buffer, int count, int datatype, int recipient, Shmem_Secondary_Group* sg);
+int shmem_send(void *buffer, int count, int datatype, int recipient, Laik_Shmem_Comm* sg, void* backend_data);
 
-int shmem_recv(void *buffer, int count, int datatype, int sender, int *recieved, Shmem_Secondary_Group* sg);
+int shmem_recv(void *buffer, int count, int datatype, int sender, int *recieved, Laik_Shmem_Comm* sg, void* backend_data);
 
-int shmem_sendMap(Laik_Mapping* map, int receiver, Shmem_Secondary_Group* sg);
+int shmem_sendMap(Laik_Mapping* map, int receiver, Laik_Shmem_Comm* sg, void* backend_data);
 
-int shmem_recvMap(Laik_Mapping* map, Laik_Range* range, int count, int sender, Shmem_Secondary_Group* sg);
+int shmem_recvMap(Laik_Mapping* map, Laik_Range* range, int count, int sender, Laik_Shmem_Comm* sg, void* backend_data);
 
-int shmem_PackSend(Laik_Mapping* map, Laik_Range range, int count, int receiver, Shmem_Secondary_Group* sg);
+int shmem_PackSend(Laik_Mapping* map, Laik_Range range, int count, int receiver, Laik_Shmem_Comm* sg, void* backend_data);
 
-int shmem_RecvUnpack(Laik_Mapping* map, Laik_Range* range, int count, int sender, Shmem_Secondary_Group* sg);
+int shmem_RecvUnpack(Laik_Mapping* map, Laik_Range* range, int count, int sender, Laik_Shmem_Comm* sg, void* backend_data);
 
-int shmem_RecvReduce(char* buf, int count, int sender, Laik_Type* type, Laik_ReductionOperation redOp, Shmem_Secondary_Group* sg);
+int shmem_RecvReduce(char* buf, int count, int sender, Laik_Type* type, Laik_ReductionOperation redOp, Laik_Shmem_Comm* sg, void* backend_data);
 
 //------------------------------------------------------------------------------
 // copy buffer management and subgroup handling
 
-void cleanupBuffer(Shmem_Secondary_Group* sg);
+void cleanupBuffer();
 
-void createBuffer(Shmem_Secondary_Group* sg, size_t size);
+void createBuffer(size_t size);
 
-bool onSameIsland(Laik_ActionSeq* as, Shmem_Secondary_Group* sg, int inputgroup, int outputgroup);
+bool onSameIsland(Laik_ActionSeq* as, Laik_Shmem_Comm* sg, int inputgroup, int outputgroup);
 
-void shmem_transformSubGroup(Laik_ActionSeq* as, Shmem_Secondary_Group* sg, int chain_idx);
+void shmem_transformSubGroup(Laik_ActionSeq* as, Laik_Shmem_Comm* sg, int chain_idx);
 
 #endif

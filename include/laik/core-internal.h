@@ -40,6 +40,7 @@ struct _Laik_Group {
     int size;        // number of processes in group
     int myid;        // index of this process (in [0;size[ or -1 if not in group)
     void* backend_data;
+    void* sec_group[MAX_SECONDARIES];
 
     Laik_Group* parent;
     Laik_Group* parent2; // used in laik_new_union_group

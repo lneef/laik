@@ -91,34 +91,12 @@ struct _Laik_Backend {
 
   unsigned char chain_length;
 };
-
-struct _Laik_Secondary_Group
-{
-  // my rank
-  int rank;
-
-  // size of the partition I am part of
-  int size;
-
-  // identifier of my partition
-  int colour;
-
-  // divsion of the world group
-  int* divsion;
-
-  // mapping of primary to secondary ranks
-  int* secondaryRanks;
-};
-
 struct _Laik_Secondary {
   //index in chain of secondary backends
   unsigned chain_idx;
 
-  // My group
-  Laik_Secondary_Group* groupInfo;
-
   // delete all buffers allocated by secondary backend
-  void (*laik_secondary_finalize)(const Laik_Secondary*);
+  void (*laik_secondary_finalize)();
 
   //prepare action sequence, i.e. replace generic laik actions with backend specific actions
   bool (*laik_secondary_prepare)(const Laik_Secondary*, Laik_ActionSeq *);
@@ -127,7 +105,7 @@ struct _Laik_Secondary {
   bool (*laik_secondary_exec)(const Laik_Secondary*, Laik_ActionSeq *, Laik_Action *);
 
   //cleanup temporary buffers
-  void (*laik_secondary_cleanup)(const Laik_Secondary*);
+  void (*laik_secondary_cleanup)();
 
   //log secondary specific actions
   bool (*laik_secondary_log_action)(const Laik_Secondary*, Laik_ActionSeq*, Laik_Action *);

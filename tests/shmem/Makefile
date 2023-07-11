@@ -25,10 +25,12 @@ all: clean $(TESTS)
 test-vsum:
 	$(SDIR)./test-vsum-mpi-shmem-1.sh
 	$(SDIR)./test-vsum-mpi-shmem-4-2.sh
+	$(SDIR)./test-vsum-mpi-shmem-8-2.sh
 
 test-vsum2:
 	$(SDIR)./test-vsum2-mpi-shmem-1.sh
 	$(SDIR)./test-vsum2-mpi-shmem-4-2.sh
+	$(SDIR)./test-vsum2-mpi-shmem-8-2.sh
 
 test-spmv:
 	$(SDIR)./test-spmv-mpi-shmem-1.sh
@@ -37,66 +39,80 @@ test-spmv:
 test-spmv2:
 	$(SDIR)./test-spmv2-mpi-shmem-1.sh
 	$(SDIR)./test-spmv2-mpi-shmem-4-2.sh
+	$(SDIR)./test-spmv2-mpi-shmem-8-2.sh
 
 test-spmv2r:
-	$(SDIR)./test-spmv2r-mpi-1.sh
-	$(SDIR)./test-spmv2r-mpi-4.sh
+	$(SDIR)./test-spmv2r-mpi-shmem-1.sh
+	$(SDIR)./test-spmv2r-mpi-shmem-4-2.sh
+	$(SDIR)./test-spmv2r-mpi-shmem-8-2.sh
 
-test-spmv2-shrink:
-	$(SDIR)./test-spmv2-shrink-mpi-4.sh
+#test-spmv2-shrink:
+#	$(SDIR)./test-spmv2-shrink-mpi-4-2.sh
 
-test-spmv2-shrink-inc:
-	$(SDIR)./test-spmv2-shrink-inc-mpi-4.sh
+#test-spmv2-shrink-inc:
+#	$(SDIR)./test-spmv2-shrink-inc-mpi-4.sh
 
 test-jac1d:
-	$(SDIR)./test-jac1d-100-mpi-1.sh
-	$(SDIR)./test-jac1d-100-mpi-4.sh
+	$(SDIR)./test-jac1d-100-mpi-shmem-1.sh
+	$(SDIR)./test-jac1d-100-mpi-shmem-4-2.sh
+	$(SDIR)./test-jac1d-100-mpi-shmem-8-2.sh
 
 test-jac1d-repart:
-	$(SDIR)./test-jac1d-1000-repart-mpi-1.sh
-	$(SDIR)./test-jac1d-1000-repart-mpi-4.sh
+	$(SDIR)./test-jac1d-1000-repart-mpi-shmem-1.sh
+	$(SDIR)./test-jac1d-1000-repart-mpi-shmem-4-2.sh
+	$(SDIR)./test-jac1d-1000-repart-mpi-shmem-8-2.sh
 
 test-jac2d:
-	$(SDIR)./test-jac2d-1000-mpi-1.sh
-	$(SDIR)./test-jac2d-1000-mpi-4.sh
+	$(SDIR)./test-jac2d-1000-mpi-shmem-1.sh
+	$(SDIR)./test-jac2d-1000-mpi-shmem-4-2.sh
+	$(SDIR)./test-jac2d-1000-mpi-shmem-8-2.sh
 
 test-jac2d-gen:
-	$(SDIR)./test-jac2d-gen-1000-mpi-4.sh
+	$(SDIR)./test-jac2d-gen-1000-mpi-shmem-4-2.sh
 
 test-jac2d-noc:
-	$(SDIR)./test-jac2dn-1000-mpi-4.sh
+	$(SDIR)./test-jac2dn-1000-mpi-shmem-4-2.sh
+	$(SDIR)./test-jac2dn-1000-mpi-shmem-8-2.sh
 
 test-jac3d:
-	$(SDIR)./test-jac3d-100-mpi-1.sh
-	$(SDIR)./test-jac3d-100-mpi-4.sh
+	$(SDIR)./test-jac3d-100-mpi-shmem-1.sh
+	$(SDIR)./test-jac3d-100-mpi-shmem-4-2.sh
+	$(SDIR)./test-jac3d-100-mpi-shmem-8-2.sh
 
 test-jac3d-gen:
-	$(SDIR)./test-jac3d-gen-100-mpi-4.sh
+	$(SDIR)./test-jac3d-gen-100-mpi-shmem-4.sh
 
 test-jac3dr:
-	$(SDIR)./test-jac3dr-100-mpi-1.sh
-	$(SDIR)./test-jac3dr-100-mpi-4.sh
+	$(SDIR)./test-jac3dr-100-mpi-shmem-1.sh
+	$(SDIR)./test-jac3dr-100-mpi-shmem-4-2.sh
+	$(SDIR)./test-jac3dr-100-mpi-shmem-8-2.sh
 
 test-jac3dri:
-	$(SDIR)./test-jac3dri-100-mpi-4.sh
+	$(SDIR)./test-jac3dri-100-mpi-shmem-4-2.sh
+	$(SDIR)./test-jac3dri-100-mpi-shmem-8-2.sh
 
 test-jac3d-rgx3:
-	$(SDIR)./test-jac3d-rgx3-100-mpi-4.sh
+	$(SDIR)./test-jac3d-rgx3-100-mpi-shmem-4-2.sh
 
 test-jac3de:
-	$(SDIR)./test-jac3de-100-mpi-1.sh
-	$(SDIR)./test-jac3de-100-mpi-4.sh
+	$(SDIR)./test-jac3de-100-mpi-shmem-1.sh
+	$(SDIR)./test-jac3de-100-mpi-shmem-4-2.sh
+	$(SDIR)./test-jac3de-100-mpi-shmem-8-2.sh
 
 test-jac3der:
-	$(SDIR)./test-jac3der-100-mpi-1.sh
-	$(SDIR)./test-jac3der-100-mpi-4.sh
+	$(SDIR)./test-jac3der-100-mpi-shmem-1.sh
+	$(SDIR)./test-jac3der-100-mpi-shmem-4-2.sh
+	$(SDIR)./test-jac3der-100-mpi-shmem-8-2.sh
 
 test-jac3deri:
-	$(SDIR)./test-jac3deri-100-mpi-4.sh
+	$(SDIR)./test-jac3deri-100-mpi-shmem-4-2.sh
+	$(SDIR)./test-jac3deri-100-mpi-shmem-8-2.sh
+
 
 test-jac3da:
 	$(SDIR)./test-jac3da-100-mpi-shmem-1.sh
 	$(SDIR)./test-jac3da-100-mpi-shmem-4-2.sh
+	$(SDIR)./test-jac3da-100-mpi-shmem-8-2.sh
 
 test-jac3dar:
 	$(SDIR)./test-jac3dar-100-mpi-shmem-1.sh
@@ -104,30 +120,37 @@ test-jac3dar:
 
 test-jac3dari:
 	$(SDIR)./test-jac3dari-100-mpi-shmem-4-2.sh
+	$(SDIR)./test-jac3dari-100-mpi-shmem-8-2.sh
+
 
 test-jac3d-noc:
 	$(SDIR)./test-jac3dn-100-mpi-shmem-4-2.sh
+	$(SDIR)./test-jac3dn-100-mpi-shmem-8-2.sh
 
 test-jac3dr-noc:
 	$(SDIR)./test-jac3dnr-100-mpi-shmem-4-2.sh
+	$(SDIR)./test-jac3dnr-100-mpi-shmem-8-2.sh
 
 test-markov:
 	$(SDIR)./test-markov-20-4-mpi-shmem-1.sh
 	$(SDIR)./test-markov-40-4-mpi-shmem-4-2.sh
+	$(SDIR)./test-markov-40-4-mpi-shmem-8-2.sh
 
 test-markov2:
 	$(SDIR)./test-markov2-20-4-mpi-shmem-1.sh
 	$(SDIR)./test-markov2-40-4-mpi-shmem-4-2.sh
+	$(SDIR)./test-markov2-40-4-mpi-shmem-8-2.sh
 
 test-markov2-f:
-	$(SDIR)./test-markov2-f-500-5-mpi-shmem-4-2.sh
+	$(SDIR)./test-markov2-f-500-5-mpi-shmem-8-2.sh
 
 test-propagation2d:
 	$(SDIR)./test-propagation2d-10-mpi-shmem-1.sh
 	$(SDIR)./test-propagation2d-10-mpi-shmem-4-2.sh
+	$(SDIR)./test-propagation2d-10-mpi-shmem-8-2.sh
 
 test-propagation2do:
-	$(SDIR)./test-propagation2do-10-mpi-shmem-4-2.sh
+	$(SDIR)./test-propagation2do-10-mpi-shmem-8-2.sh
 
 clean:
 	rm -rf *.out

@@ -239,7 +239,7 @@ void laik_init_layout(Laik_Layout* l, int dims, int map_count, uint64_t count,
                       laik_layout_pack_t pack,
                       laik_layout_unpack_t unpack,
                       laik_layout_copy_t copy,
-                      laik_layout_alloc_t alloc,
+                      laik_layout_init_t alloc,
                       laik_layout_free_t free)
 {
     l->dims = dims;
@@ -274,7 +274,7 @@ void laik_init_layout(Laik_Layout* l, int dims, int map_count, uint64_t count,
     l->unpack = unpack;
     l->describe = describe;
     l->copy = copy;
-    l->alloc = alloc;
+    l->init = alloc;
     l->free = free;
 }
 

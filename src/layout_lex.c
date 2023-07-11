@@ -490,34 +490,19 @@ unsigned int unpack_lex(Laik_Mapping* m, Laik_Range* s,
     return count;
 }
 
-char* laik_layout_alloc_lex(Laik_Mapping* m, int n)
+void laik_layout_alloc_lex(Laik_Mapping* m, char* header, int n)
 {
     Laik_Layout_Lex* ll = (Laik_Layout_Lex*)m->layout;
-
-    Laik_Data* data = m->data;
-    Laik_Allocator* a = m->allocator;
     Lex_Memory_Header* lold = ll->e[n].hd;
-    assert(a);
 
-    uint64_t size = m->count * data->elemsize + sizeof(Lex_Memory_Header);
-    char* ptr = a->malloc(m->data, size);
-
-    if(!ptr)
-        laik_panic("Out of memory allocating mapping!");
-
-    m->header = ptr;
-    Lex_Memory_Header* hd = (Lex_Memory_Header*) ptr;
+    Lex_Memory_Header* hd = (Lex_Memory_Header*) header;
     hd->count = lold->count;
     memcpy(hd->stride, lold->stride, 3 * sizeof(uint64_t));
-    hd->hd.size = lold->hd.size;
     strncpy(hd->hd.name, LEX_IDENTIFIER, 9);
     hd->hd.size = sizeof(Lex_Memory_Header);
 
-    ptr = ptr + sizeof(Lex_Memory_Header);
     free(ll->e[n].hd);
     ll->e[n].hd = hd;
-
-    return ptr;
 }
 
 void laik_layout_lex_free(Laik_Mapping* m, int n)
@@ -584,14 +569,14 @@ Laik_Layout* laik_new_layout_lex(int n, Laik_Range* ranges)
             e->hd->stride[1] = 0; // invalid, not used
 
         if (dims > 2) {
-        e->hd->stride[2] = e->hd->stride[1] * (range->to.i[1] - range->from.i[1]);
+            e->hd->stride[2] = e->hd->stride[1] * (range->to.i[1] - range->from.i[1]);
             assert(range->from.i[2] < range->to.i[2]);
         }
         else
             e->hd->stride[2] = 0; // invalid, not used
 
         e->range = *range;
-        }
+    }
     l->h.count = count;
 
     return (Laik_Layout*) l;

@@ -298,15 +298,17 @@ static void laik_mpi_panic(int err)
 
 MPI_Comm initComm;
 
-int sendIntegers(int *buf, int count, int receiver)
+int sendIntegers(int *buf, int count, int receiver, void* backend_data)
 {
-    return MPI_Send(buf, count, MPI_INTEGER, receiver, 0, initComm);
+    MPIGroupData* gd = (MPIGroupData*) backend_data;
+    return MPI_Send(buf, count, MPI_INTEGER, receiver, 0, gd->comm);
 }
 
-int recvIntegers(int *buf, int count, int sender)
+int recvIntegers(int *buf, int count, int sender, void* backend_data)
 {
     MPI_Status st;
-    return MPI_Recv(buf, count, MPI_INTEGER, sender, 0, initComm, &st);
+    MPIGroupData* gd = (MPIGroupData*) backend_data;
+    return MPI_Recv(buf, count, MPI_INTEGER, sender, 0, gd->comm, &st);
 }
 
 //----------------------------------------------------------------------------
@@ -404,13 +406,13 @@ Laik_Instance *laik_init_mpi(int *argc, char ***argv)
         mpi_async = atoi(str); 
 
     // Secondary backend initialization.
-    int (*send)(int *, int, int);
-    int (*recv)(int *, int, int);
+    int (*send)(int *, int, int, void*);
+    int (*recv)(int *, int, int, void*);
     send = &sendIntegers;
     recv = &recvIntegers;
     initComm = d->comm;
     inst -> backend -> chain_length = 0;
-    laik_init_secondaries(inst, rank, size, send, recv);
+    laik_init_secondaries(inst, world, rank, size, send, recv);
 
     mpi_instance = inst;
     return inst;
@@ -451,7 +453,6 @@ void laik_mpi_updateGroup(const Laik_Backend* this, Laik_Group* g)
     // TODO: only supports shrinking of parent for now
     assert(g->parent);
     assert(g->parent->size >= g->size);
-
     laik_log(1, "MPI backend updateGroup: parent %d (size %d, myid %d) "
                 "=> group %d (size %d, myid %d)",
              g->parent->gid, g->parent->size, g->parent->myid,
@@ -463,7 +464,7 @@ void laik_mpi_updateGroup(const Laik_Backend* this, Laik_Group* g)
 
     MPIGroupData *gdParent = (MPIGroupData *)g->parent->backend_data;
     assert(gdParent);
-
+    
     MPIGroupData *gd = (MPIGroupData *)g->backend_data;
     assert(gd == 0); // must not be updated yet
     gd = malloc(sizeof(MPIGroupData));
@@ -473,7 +474,7 @@ void laik_mpi_updateGroup(const Laik_Backend* this, Laik_Group* g)
         exit(1); // not actually needed, laik_panic never returns
     }
     g->backend_data = gd;
-
+    laik_secondaries_update_group(this, g);
     laik_log(1, "MPI Comm_split: old myid %d => new myid %d",
              g->parent->myid, g->fromParent[g->parent->myid]);
 
@@ -1138,7 +1139,6 @@ void laik_mpi_prepare(const Laik_Backend* this, Laik_ActionSeq* as)
         laik_aseq_calc_stats(as);
         return;
     } 
-    
     changed = laik_aseq_sort_2phases(as);
     laik_log_ActionSeqIfChanged(changed, as, "After sorting for deadlock avoidance");
 

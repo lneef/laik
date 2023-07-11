@@ -21,7 +21,7 @@
 
 void shmem_free(void* ptr);
 
-void deleteAllocatedSegments(int);
+void deleteAllocatedSegments();
 
 void* shmem_alloc(size_t size, int* shimdPtr);
 

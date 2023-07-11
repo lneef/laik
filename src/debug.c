@@ -745,7 +745,7 @@ void laik_log_ActionSeq(Laik_ActionSeq *as, bool showDetails)
                     as->bufferCount, 0.000001 * laik_aseq_bufsize(as),
                     as->actionCount, as->bytesUsed,
                     as->ceRanges, sizeof(Laik_CopyEntry) * as->ceRanges);
-
+                    
     Laik_TransitionContext* tc = 0;
     for(int i = 0; i < as->contextCount; i++) {
         tc = as->context[i];
@@ -764,6 +764,7 @@ void laik_log_ActionSeq(Laik_ActionSeq *as, bool showDetails)
     Laik_Action* a = as->action;
     for(unsigned int i = 0; i < as->actionCount; i++, a = nextAction(a)) {
         laik_log_Action(a, as);
+        laik_log(2, "%d", i);
         laik_log_append("\n");
     }
     assert(as->bytesUsed == (size_t) (((char*)a) - ((char*)as->action)));

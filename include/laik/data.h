@@ -29,6 +29,8 @@
 #include "space.h"    // for Laik_DataFlow, Laik_Partitioning
 #include "action.h"
 
+//increse x to multiple of p(power of 2)
+#define PAD(x, p) (x & (p - 1) ? ((x | (p - 1)) + 1) : x)
 /*********************************************************************/
 /* LAIK Data - Data containers for LAIK index spaces
  *********************************************************************/
@@ -333,7 +335,7 @@ typedef unsigned int (*laik_layout_unpack_t)(
     Laik_Mapping* m, Laik_Range* r,
     Laik_Index* idx, char* buf, unsigned int size);
 
-typedef char* (*laik_layout_alloc_t)(Laik_Mapping* m, int n);
+typedef void (*laik_layout_init_t)(Laik_Mapping* m, char* header, int n);
 
 typedef void (*laik_layout_free_t)(Laik_Mapping*m , int n);
 
@@ -363,7 +365,7 @@ struct _Laik_Layout {
     laik_layout_unpack_t unpack;
     laik_layout_copy_t copy;
 
-    laik_layout_alloc_t alloc;
+    laik_layout_init_t init;
     laik_layout_free_t free;
 
 };
@@ -377,7 +379,7 @@ void laik_init_layout(Laik_Layout* l, int dims, int map_count, uint64_t count,
                       laik_layout_pack_t pack,
                       laik_layout_unpack_t unpack,
                       laik_layout_copy_t copy,
-                      laik_layout_alloc_t alloc,
+                      laik_layout_init_t alloc,
                       laik_layout_free_t free);
 
 // (slow) generic copy just using offset function from layout interface

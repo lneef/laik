@@ -522,8 +522,10 @@ void laik_allocateMap(Laik_Mapping* m, Laik_SwitchStat* ss)
     Laik_Allocator* a = m->allocator;
     assert(a != 0);
     assert(a->malloc != 0);
-    char* start = m->layout->alloc(m, m->layoutSection);
-    //(a->malloc)(d, size);
+    size_t hd_size = m->layout->header_size;
+    m->header = (a->malloc)(d, size + hd_size);
+    m->layout->init(m, m->header, m->layoutSection);
+    char* start = m->header + hd_size;
 
     if (!start) {
         laik_log(LAIK_LL_Panic,

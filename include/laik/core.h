@@ -62,8 +62,8 @@ Laik_Instance* laik_init(int* argc, char*** argv);
 /**
 *  Generic initialization function for secondary backends (currently only shared memory)
 */
-void laik_init_secondaries(Laik_Instance* inst, int primaryRank, int primarySize, int (*send)(int *, int, int),
-                         int (*recv)(int *, int, int));
+void laik_init_secondaries(Laik_Instance* inst, Laik_Group* world, int primaryRank, int primarySize, int (*send)(int *, int, int, void*),
+                         int (*recv)(int *, int, int, void*));
 
 //! shut down communication and free resources of this instance
 void laik_finalize(Laik_Instance* inst);

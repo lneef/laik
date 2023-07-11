@@ -19,6 +19,7 @@
 
 #include "shmem.h"
 #include "backends/shmem/shmem-cpybuf.h"
+#include "backends/shmem/shmem-manager.h"
 #include "laik.h"
 #include "laik/core.h"
 #include "laik/data.h"
@@ -48,10 +49,6 @@
 #define META_OFFSET 0x666
 #define BUF_OFFSET 0x999
 
-typedef enum DataSpec{
-    PACK, MAP
-} DataSpec;
-
 struct shmInitSeg
 {
     atomic_int rank;
@@ -59,13 +56,6 @@ struct shmInitSeg
     bool didInit;
 };
 
-struct commHeader{
-    DataSpec spec;
-    int receiver;
-    int shmid;
-    int count;
-    Laik_Range range;
-};
 
 
 static int pair(int colour, int rank)
@@ -74,85 +64,72 @@ static int pair(int colour, int rank)
     return tmp/2 + colour + 1;
 }
 
-void deleteOpenShmSegs(Shmem_Secondary_Group* sg)
+static struct cpyBuf cpyBuf;
+static int headerShmid = -1;
+static struct commHeader* shmp;
+
+void deleteOpenShmSegs(__attribute_maybe_unused__ int sig)
 {
-    if(sg->headerShmid != -1)
-    {
-        shmctl(sg->headerShmid, IPC_RMID, 0);
-    }
-
-    if(sg->cpyBuf != NULL)
-        //shmem_cpybuf_delete(groupInfo.cpyBuf);
-
-    deleteAllocatedSegments(0);
+    deleteAllocatedSegments();
 }
 
-static int createMetaInfoSeg(void)
+static int createMetaInfoSeg()
 {
-    int headerShmid = shmget(IPC_PRIVATE, sizeof(struct commHeader), 0644 | IPC_CREAT);
-    assert(headerShmid >= 0);
-    struct commHeader *shmpMap = shmat(headerShmid, NULL, 0);
-    shmpMap->receiver = -1;
-
-    if (shmdt(shmpMap) == -1)
-        return -1;
-
-    return headerShmid;
+    shmp = shmem_alloc(sizeof(struct commHeader), &headerShmid);
+    assert(shmp != (void*)-1);
+    shmp->receiver = -1;
+    return SHMEM_SUCCESS;
 }
 
-int shmem_get_numIslands(Shmem_Secondary_Group* sg, int* num){
+int shmem_get_numIslands(Laik_Shmem_Comm* sg, int* num){
     *num = sg->numIslands;
     return SHMEM_SUCCESS;
 }
 
-int shmem_get_primarys(Shmem_Secondary_Group* sg, int** primarys){
+int shmem_get_primarys(Laik_Shmem_Comm* sg, int** primarys){
     *primarys = sg->primaryRanks;
     return SHMEM_SUCCESS;
 }
 
-int shmem_get_colours(Shmem_Secondary_Group* sg, int **buf)
+int shmem_get_colours(Laik_Shmem_Comm* sg, int **buf)
 {
-    *buf = sg->info.divsion;
+    *buf = sg->divsion;
     return SHMEM_SUCCESS;
 }
 
-int shmem_get_secondaryRanks(Shmem_Secondary_Group* sg, int **buf)
+int shmem_get_secondaryRanks(Laik_Shmem_Comm* sg, int **buf)
 {
-    *buf = sg->info.secondaryRanks;
+    *buf = sg->secondaryRanks;
     return SHMEM_SUCCESS;
 }
 
-int shmem_comm_size(Shmem_Secondary_Group* sg, int *sizePtr)
+int shmem_comm_size(Laik_Shmem_Comm* sg, int *sizePtr)
 {
-    *sizePtr = sg->info.size;
+    *sizePtr = sg->size;
     return SHMEM_SUCCESS;
 }
 
-int shmem_comm_rank(Shmem_Secondary_Group* sg, int *rankPtr)
+int shmem_comm_rank(Laik_Shmem_Comm* sg, int *rankPtr)
 {
-    *rankPtr = sg->info.rank;
+    *rankPtr = sg->rank;
     return SHMEM_SUCCESS;
 }
 
-int shmem_comm_colour(Shmem_Secondary_Group* sg, int *colourPtr)
+int shmem_comm_colour(Laik_Shmem_Comm* sg, int *colourPtr)
 {
-    *colourPtr = sg->info.colour;
+    *colourPtr = sg->colour;
     return SHMEM_SUCCESS;
 }
 
-int shmem_2cpy_send(void *buffer, int count, int datatype, int recipient, Shmem_Secondary_Group* sg)
+int shmem_2cpy_send(void *buffer, int count, int datatype, int recipient, Laik_Shmem_Comm* sg)
 {
     int size = datatype * count;
-    shmem_cpybuf_alloc(sg->cpyBuf, size);
-
-    struct commHeader *shmp = shmat(sg->headerShmid, NULL, 0);
-    if (shmp == (void *)-1)
-        return SHMEM_SHMAT_FAILED;
+    shmem_cpybuf_alloc(&cpyBuf, size);
 
     shmp->count = count;
     shmp->spec = PACK;
-    shmp->shmid = sg->cpyBuf->shmid;
-    memcpy(sg->cpyBuf->ptr, buffer, size);
+    shmp->shmid = cpyBuf.shmid;
+    memcpy(cpyBuf.ptr, buffer, size);
     shmp->receiver = recipient;
     while (shmp->receiver != -1)
     {
@@ -161,7 +138,7 @@ int shmem_2cpy_send(void *buffer, int count, int datatype, int recipient, Shmem_
     return SHMEM_SUCCESS;
 }
 
-int shmem_1cpy_send(void *buffer, int count, int datatype, int recipient, Shmem_Secondary_Group* sg)
+int shmem_1cpy_send(void *buffer, int count, int datatype, int recipient, Laik_Shmem_Comm* sg)
 {
     (void) datatype;
 
@@ -169,11 +146,6 @@ int shmem_1cpy_send(void *buffer, int count, int datatype, int recipient, Shmem_
     if(get_shmid(buffer, &bufShmid, &offset) == SHMEM_SEGMENT_NOT_FOUND){
         return shmem_2cpy_send(buffer, count, datatype, recipient, sg);
     }
-
-    // Attach to the segment to get a pointer to it.
-    struct commHeader *shmp = shmat(sg->headerShmid, NULL, 0);
-    if (shmp == (void *)-1)
-        return SHMEM_SHMAT_FAILED;
 
     shmp->count = count;
     shmp->spec = PACK;
@@ -183,23 +155,21 @@ int shmem_1cpy_send(void *buffer, int count, int datatype, int recipient, Shmem_
     {
     }
 
-    if (shmdt(shmp) == -1)
-        return SHMEM_SHMDT_FAILED;
-
     return SHMEM_SUCCESS;
 }
 
-int shmem_recv(void *buffer, int count, int datatype, int sender, int *received, Shmem_Secondary_Group* sg)
+int shmem_recv(void *buffer, int count, int datatype, int sender, int *received, Laik_Shmem_Comm* sg, void* backend_data)
 {
     int shmid;
-    sg->recvP(&shmid, 1, sg->primaryRanks[sender]);
+    laik_log(2, "%d", sg->primaryRanks[sender]);
+    sg->recvP(&shmid, 1, sg->primaryRanks[sender], backend_data);
     
     // Attach to the segment to get a pointer to it.
     struct commHeader *shmp = shmat(shmid, NULL, 0);
     if (shmp == (void *)-1)
         return SHMEM_SHMAT_FAILED;
 
-    while (shmp->receiver != sg->info.rank)
+    while (shmp->receiver != sg->rank)
     {
     }
 
@@ -209,7 +179,6 @@ int shmem_recv(void *buffer, int count, int datatype, int sender, int *received,
     char *bufShmp = shmat(bufShmid, NULL, 0);
     if (bufShmp == (void *)-1)
         return SHMEM_SHMAT_FAILED;
-
     int bufSize = datatype * count;
     int receivedSize = *received * datatype;
     if (bufSize < receivedSize)
@@ -232,10 +201,9 @@ int shmem_recv(void *buffer, int count, int datatype, int sender, int *received,
     return SHMEM_SUCCESS;
 }
 
-int shmem_sendMap(Laik_Mapping* map, int receiver, Shmem_Secondary_Group* sg)
+int shmem_sendMap(Laik_Mapping* map, int receiver, Laik_Shmem_Comm* sg, void* backend_data)
 {
-    sg->sendP(&sg->headerShmid, 1, sg->primaryRanks[receiver]);
-    struct commHeader *shmp = shmat(sg->headerShmid, NULL, 0);
+    sg->sendP(&headerShmid, 1, sg->primaryRanks[receiver], backend_data);
     int shmid, offset;
     get_shmid(map->start, &shmid, &offset);
 
@@ -246,29 +214,24 @@ int shmem_sendMap(Laik_Mapping* map, int receiver, Shmem_Secondary_Group* sg)
     while(shmp->receiver != -1)
     {
     }
-
-    shmdt(shmp);
     return SHMEM_SUCCESS;   
 }
 
-int shmem_PackSend(Laik_Mapping* map, Laik_Range range, int count, int receiver, Shmem_Secondary_Group* sg)
+int shmem_PackSend(Laik_Mapping* map, Laik_Range range, int count, int receiver, Laik_Shmem_Comm* sg, void* backend_data)
 {   
-    shmem_cpybuf_alloc(sg->cpyBuf, count * map->data->elemsize);
-    sg->sendP(&sg->headerShmid, 1, sg->primaryRanks[receiver]);
-    laik_log(2, "%d", sg->headerShmid);
-    struct commHeader* shmp = shmat(sg->headerShmid, NULL, 0);
+    shmem_cpybuf_alloc(&cpyBuf, count * map->data->elemsize);
+    sg->sendP(&headerShmid, 1, sg->primaryRanks[receiver], backend_data);
     
     //pack makes changes to range
-    shmp->shmid = sg->cpyBuf->shmid;
+    shmp->shmid = cpyBuf.shmid;
     shmp->spec = PACK;
-    map->layout->pack(map, &range, &range.from, sg->cpyBuf->ptr, count * map->data->elemsize);
+    map->layout->pack(map, &range, &range.from, cpyBuf.ptr, count * map->data->elemsize);
     shmp->receiver = receiver;
 
     while(shmp->receiver != -1)
     {
     }
 
-    shmdt(shmp);
     return SHMEM_SUCCESS;
 }
 
@@ -303,15 +266,17 @@ static inline int shmem_cpyMap(Laik_Mapping* map, Laik_Range* range, struct comm
     return SHMEM_SUCCESS;
 }
 
-int shmem_recvMap(Laik_Mapping* map, Laik_Range* range, int count, int sender, Shmem_Secondary_Group* sg)
+int shmem_recvMap(Laik_Mapping* map, Laik_Range* range, int count, int sender, Laik_Shmem_Comm* sg, void* backend_data)
 {
     int shmid, ret = SHMEM_FAILURE;
-    sg->recvP(&shmid, 1, sg->primaryRanks[sender]);
+    sg->recvP(&shmid, 1, sg->primaryRanks[sender], backend_data);
     struct commHeader* shmp = shmat(shmid, NULL, 0);
-    while(shmp->receiver != sg->info.rank)
+    assert(shmp != (void*) -1);
+    while(shmp->receiver != sg->rank)
     {
     }
     char* ptr = shmat(shmp->shmid, NULL, 0);
+    assert(ptr != (void*) -1);
     if(shmp->spec == PACK)
     {
         ret = shmem_cpyPack(map, range, shmp, ptr, count);
@@ -327,16 +292,17 @@ int shmem_recvMap(Laik_Mapping* map, Laik_Range* range, int count, int sender, S
     return ret;
 }
 
-int shmem_RecvUnpack(Laik_Mapping *map, Laik_Range *range, int count, int sender, Shmem_Secondary_Group* sg)
+int shmem_RecvUnpack(Laik_Mapping *map, Laik_Range *range, int count, int sender, Laik_Shmem_Comm* sg, void* backend_data)
 {
     int shmid;
-    sg->recvP(&shmid, 1, sg->primaryRanks[sender]);
+    sg->recvP(&shmid, 1, sg->primaryRanks[sender], backend_data);
     struct commHeader* shmp = shmat(shmid, NULL, 0);
-    while(shmp->receiver != sg->info.rank)
+    assert(shmp != (void*) -1);
+    while(shmp->receiver != sg->rank)
     {
     }
     char* ptr = shmat(shmp->shmid, NULL, 0);
-
+    assert(ptr != (void*) -1);
     assert(shmp->spec == PACK);
     int ret = shmem_cpyPack(map, range, shmp, ptr, count);
 
@@ -346,18 +312,18 @@ int shmem_RecvUnpack(Laik_Mapping *map, Laik_Range *range, int count, int sender
     return ret;
 }
 
-int shmem_RecvReduce(char* buf, int count, int sender, Laik_Type* type, Laik_ReductionOperation redOp, Shmem_Secondary_Group* sg)
+int shmem_RecvReduce(char* buf, int count, int sender, Laik_Type* type, Laik_ReductionOperation redOp, Laik_Shmem_Comm* sg, void* backend_data)
 {
     int shmid;
-    sg->recvP(&shmid, 1, sg->primaryRanks[sender]);
-    laik_log(2, "%d", sg->primaryRanks[sender]);
+    sg->recvP(&shmid, 1, sg->primaryRanks[sender], backend_data);
     struct commHeader* shmp = shmat(shmid, NULL, 0);
-    laik_log(2, "%d", shmid);
-    while(shmp->receiver != sg->info.rank)
+    assert(shmp != (void*) -1);
+    while(shmp->receiver != sg->rank)
     {
     } 
     assert(shmp->spec == PACK);
     char* ptr = shmat(shmp->shmid, NULL, 0);
+    assert(ptr != (void*) -1);
     assert(type->reduce);
     type->reduce(buf, buf, ptr, count, redOp);
 
@@ -368,9 +334,9 @@ int shmem_RecvReduce(char* buf, int count, int sender, Laik_Type* type, Laik_Red
 
 }
 
-int shmem_send(void* buffer, int count, int datatype, int recipient, Shmem_Secondary_Group* sg)
+int shmem_send(void* buffer, int count, int datatype, int recipient, Laik_Shmem_Comm* sg, void* backend_data)
 {
-    sg->sendP(&sg->headerShmid, 1, sg->primaryRanks[recipient]);
+    sg->sendP(&headerShmid, 1, sg->primaryRanks[recipient], backend_data);
     return sg->send(buffer, count, datatype, recipient, sg);
 }
 
@@ -406,12 +372,16 @@ int shmem_error_string(int error, char *str)
     return SHMEM_SUCCESS;
 }
 
-int shmem_finalize(Shmem_Secondary_Group* sg)
+int shmem_finalize()
 {
+    cleanupBuffer();
+    deleteOpenShmSegs(0);
+
+    /*
     if(sg->cpyBuf)
         free(sg->cpyBuf);
 
-    deleteOpenShmSegs(sg);
+    
     if (sg->info.divsion != NULL)
         free(sg->info.divsion);
     
@@ -420,14 +390,15 @@ int shmem_finalize(Shmem_Secondary_Group* sg)
     
     if(sg->primaryRanks != NULL)
         free(sg->primaryRanks);
+    */
 
     return SHMEM_SUCCESS;
 }
 
-int shmem_secondary_init(Shmem_Secondary_Group* sg, int primaryRank, int primarySize, int* locations, int** newLocations,
-                        int** ranks, int (*send)(int *, int, int), int (*recv)(int *, int, int))
+int shmem_secondary_init(Laik_Shmem_Comm* sg, int primaryRank, int primarySize, int* locations, int** newLocations,
+                        int** ranks, int (*send)(int *, int, int, void*), int (*recv)(int *, int, int, void*), void* backend_data)
 {
-    signal(SIGINT, deleteAllocatedSegments);
+    signal(SIGINT, deleteOpenShmSegs);
 
     const char *envRanks = getenv("LAIK_SHMEM_SUB_ISLANDS");
     int numSubIslands = envRanks == NULL ? 1 : atoi(envRanks);
@@ -483,7 +454,7 @@ int shmem_secondary_init(Shmem_Secondary_Group* sg, int primaryRank, int primary
         while (!shmp->didInit)
         {
         }
-        sg->info.colour = shmp->colour;
+        sg->colour = shmp->colour;
 
         if (shmdt(shmp) == -1)
             return SHMEM_SHMDT_FAILED;
@@ -492,7 +463,7 @@ int shmem_secondary_init(Shmem_Secondary_Group* sg, int primaryRank, int primary
     {
         created = true;
         // Master initialization
-        sg->info.colour = primaryRank;
+        sg->colour = primaryRank;
 
         shmp = shmat(shmid, NULL, 0);
         if (shmp == (void *)-1)
@@ -509,30 +480,30 @@ int shmem_secondary_init(Shmem_Secondary_Group* sg, int primaryRank, int primary
     // Get the colours of each process at master, calculate the groups and send each process their group.
     if (primaryRank == 0)
     {
-        sg->info.divsion = malloc(primarySize * sizeof(int));
-        sg->info.divsion[0] = 0;
-        sg->info.secondaryRanks = malloc(primarySize * sizeof(int));
-        sg->info.secondaryRanks[0] = 0;
+        sg->divsion = malloc(primarySize * sizeof(int));
+        sg->divsion[0] = 0;
+        sg->secondaryRanks = malloc(primarySize * sizeof(int));
+        sg->secondaryRanks[0] = 0;
 
         int* tmpColours = malloc(primarySize * sizeof(int));
 
         memset(tmpColours, -1, primarySize * sizeof(int));
 
         int newColour = 0;
-        tmpColours[sg->info.colour] = newColour++;
-        sg->info.colour = 0;
+        tmpColours[sg->colour] = newColour++;
+        sg->colour = 0;
 
         for (int i = 1; i < primarySize; i++)
         {   
             int colour;
-            (*recv)(&colour, 1, i);
+            (*recv)(&colour, 1, i, backend_data);
 
             if(tmpColours[colour] == -1)
                 tmpColours[colour] = newColour++;
 
-            (*send)(&tmpColours[colour], 1, i);
+            (*send)(&tmpColours[colour], 1, i, backend_data);
 
-            sg->info.divsion[i] = tmpColours[colour];
+            sg->divsion[i] = tmpColours[colour];
 
         }
 
@@ -545,53 +516,53 @@ int shmem_secondary_init(Shmem_Secondary_Group* sg, int primaryRank, int primary
 
         for (int i = 0; i < primarySize; i++)
         {   
-            if(groupSizes[sg->info.divsion[i]] == 0)
+            if(groupSizes[sg->divsion[i]] == 0)
             {
                 num_islands++; 
             }
             
-            int sec_rank = groupSizes[sg->info.divsion[i]]++;
+            int sec_rank = groupSizes[sg->divsion[i]]++;
 
             if(i == 0){
-                sg->info.rank = sec_rank;
+                sg->rank = sec_rank;
             }else{
-                (*send)(&sec_rank, 1, i);
+                (*send)(&sec_rank, 1, i, backend_data);
             }
 
-            sg->info.secondaryRanks[i] = sec_rank;
+            sg->secondaryRanks[i] = sec_rank;
         }
         sg->numIslands = num_islands;
 
         for (int i = 1; i < primarySize; i++)
         {
-            (*send)(&groupSizes[sg->info.divsion[i]], 1, i);
-            (*send)(sg->info.divsion, primarySize, i);
-            (*send)(sg->info.secondaryRanks, primarySize, i);
-            (*send)(&num_islands, 1, i);
+            (*send)(&groupSizes[sg->divsion[i]], 1, i, backend_data);
+            (*send)(sg->divsion, primarySize, i, backend_data);
+            (*send)(sg->secondaryRanks, primarySize, i, backend_data);
+            (*send)(&num_islands, 1, i, backend_data);
         }
-        sg->info.size = groupSizes[sg->info.divsion[0]];
+        sg->size = groupSizes[sg->divsion[0]];
     }
     else
     {
-        (*send)(&sg->info.colour, 1, 0);
+        (*send)(&sg->colour, 1, 0, backend_data);
 
-        (*recv)(&sg->info.colour, 1, 0);
+        (*recv)(&sg->colour, 1, 0, backend_data);
 
-        (*recv)(&sg->info.rank, 1, 0);
-        (*recv)(&sg->info.size, 1, 0);
-        sg->info.divsion = malloc(primarySize * sizeof(int));
-        (*recv)(sg->info.divsion, primarySize, 0);
-        sg->info.secondaryRanks = malloc(primarySize * sizeof(int));
-        (*recv)(sg->info.secondaryRanks, primarySize, 0);
+        (*recv)(&sg->rank, 1, 0, backend_data);
+        (*recv)(&sg->size, 1, 0, backend_data);
+        sg->divsion = malloc(primarySize * sizeof(int));
+        (*recv)(sg->divsion, primarySize, 0, backend_data);
+        sg->secondaryRanks = malloc(primarySize * sizeof(int));
+        (*recv)(sg->secondaryRanks, primarySize, 0, backend_data);
 
-        (*recv)(&sg->numIslands, 1, 0);
+        (*recv)(&sg->numIslands, 1, 0, backend_data);
     }
-    sg->primaryRanks = malloc(sg->info.size * sizeof(int));
+    sg->primaryRanks = malloc(sg->size * sizeof(int));
 
     int ii = 0;
-    for(int i = 0; i < primarySize && ii < sg->info.size; ++i)
+    for(int i = 0; i < primarySize && ii < sg->size; ++i)
     {
-        if(sg->info.divsion[i] == sg->info.colour){
+        if(sg->divsion[i] == sg->colour){
             sg->primaryRanks[ii++] = i; 
         } 
     }
@@ -599,21 +570,20 @@ int shmem_secondary_init(Shmem_Secondary_Group* sg, int primaryRank, int primary
     if (created && shmctl(shmid, IPC_RMID, 0) == -1)
         return SHMEM_SHMCTL_FAILED;
     
-    sg->cpyBuf = shmem_cpybuf_obtain();
     // Open the own meta info shm segment and set it to ready
-    sg->headerShmid = createMetaInfoSeg();
+    if(headerShmid == -1) createMetaInfoSeg();
 
-    laik_log(2, "Rank:%d on Island:%d", sg->info.rank, sg->info.colour);
-    *newLocations = sg->info.divsion;
-    *ranks = sg->info.secondaryRanks;
+    laik_log(2, "Rank:%d on Island:%d", sg->rank, sg->colour);
+    *newLocations = sg->divsion;
+    *ranks = sg->secondaryRanks;
     return SHMEM_SUCCESS;
 }
 
 
-void shmem_transformSubGroup(Laik_ActionSeq* as, Shmem_Secondary_Group* sg, int chain_idx){
+void shmem_transformSubGroup(Laik_ActionSeq* as, Laik_Shmem_Comm* sg, int chain_idx){
 
     bool* processed = malloc(sg->numIslands * sizeof(bool));
-    int* tmp = malloc(sg->info.size * sizeof(int)); 
+    int* tmp = malloc(sg->size * sizeof(int)); 
     for(int subgroup = 0; subgroup < as->subgroupCount; ++subgroup)
     {
         int last = 0;
@@ -626,16 +596,16 @@ void shmem_transformSubGroup(Laik_ActionSeq* as, Shmem_Secondary_Group* sg, int 
         {
             int inTask = laik_aseq_taskInGroup(as,  subgroup, i, -1);
 
-            if(!processed[sg->info.divsion[inTask]])
+            if(!processed[sg->divsion[inTask]])
             {
                 laik_aseq_updateTask(as, subgroup, last, inTask, -1);
                 ++last;
-                processed[sg->info.divsion[inTask]] = true;
+                processed[sg->divsion[inTask]] = true;
             }
 
-            if(sg->info.colour == sg->info.divsion[inTask])
+            if(sg->colour == sg->divsion[inTask])
             {
-                tmp[ii++] = sg->info.secondaryRanks[inTask];
+                tmp[ii++] = sg->secondaryRanks[inTask];
             }
         }
 
@@ -648,7 +618,7 @@ void shmem_transformSubGroup(Laik_ActionSeq* as, Shmem_Secondary_Group* sg, int 
     free(processed);
 }
 
-bool onSameIsland(Laik_ActionSeq* as, Shmem_Secondary_Group* sg, int inputgroup, int outputgroup)
+bool onSameIsland(Laik_ActionSeq* as, Laik_Shmem_Comm* sg, int inputgroup, int outputgroup)
 {
     int inCount = laik_aseq_groupCount(as, inputgroup,  - 1);
     int outCount = laik_aseq_groupCount(as, outputgroup,  - 1);
@@ -658,15 +628,15 @@ bool onSameIsland(Laik_ActionSeq* as, Shmem_Secondary_Group* sg, int inputgroup,
     int rankI = laik_aseq_taskInGroup(as, inputgroup, 0,  - 1);
     int rankO = laik_aseq_taskInGroup(as, outputgroup, 0, - 1);
 
-    return sg->info.divsion[rankI] == sg->info.divsion[rankO];
+    return sg->divsion[rankI] == sg->divsion[rankO];
 }
 
-void createBuffer(Shmem_Secondary_Group* sg, size_t size){
+void createBuffer(size_t size){
     if(size < 1) return;
-    shmem_cpybuf_alloc(sg->cpyBuf, COPY_BUF_SIZE);
+    shmem_cpybuf_alloc(&cpyBuf, COPY_BUF_SIZE);
 }
 
-void cleanupBuffer(Shmem_Secondary_Group* sg)
+void cleanupBuffer()
 {
-    if(sg->cpyBuf->ptr) shmem_cpybuf_delete(sg->cpyBuf);
+    if(cpyBuf.ptr) shmem_cpybuf_delete(&cpyBuf);
 }

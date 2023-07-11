@@ -51,7 +51,7 @@ static int get_shmid_and_destroy(void *ptr, int *shmid)
     return SHMEM_SEGMENT_NOT_FOUND;
 }
 
-void deleteAllocatedSegments(__attribute_maybe_unused__ int sig){
+void deleteAllocatedSegments(){
 
     struct shmSeg *l = shmList.next;
     while(l != NULL){

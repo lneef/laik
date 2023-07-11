@@ -16,8 +16,11 @@
  */
 
 
+#include "laik/core.h"
+#include "backends/shmem/shmem.h"
 #include "laik/data-internal.h"
 #include "laik/data.h"
+#include "laik/definitions.h"
 #include <laik-internal.h>
 #include <laik-backend-mpi.h>
 #include <laik-backend-shmem.h>
@@ -129,8 +132,8 @@ Laik_Instance* laik_init(int* argc, char*** argv)
     return inst;
 }
 
-void laik_init_secondaries(Laik_Instance* inst, int primaryRank, int primarySize, int (*send)(int *, int, int),
-                         int (*recv)(int *, int, int))
+void laik_init_secondaries(Laik_Instance* inst, Laik_Group* world, int primaryRank, int primarySize, int (*send)(int *, int, int, void*),
+                         int (*recv)(int *, int, int, void*))
 {
     char* sec = getenv("LAIK_SECONDARIES");
 
@@ -147,7 +150,7 @@ void laik_init_secondaries(Laik_Instance* inst, int primaryRank, int primarySize
     for(;name!=NULL;)
     {           
         if(!strcmp(name,"SHMEM" ))
-            laik_shmem_secondary_init(inst, primaryRank, primarySize, loc, &newLoc, &ranks, send, recv);
+            laik_shmem_secondary_init(inst, world, primaryRank, primarySize, loc, &newLoc, &ranks, send, recv, world->backend_data);
 
         loc = newLoc;
         name = strtok_r(NULL, ",", &saveptr);
@@ -339,6 +342,7 @@ Laik_Group* laik_create_group(Laik_Instance* i, int maxsize)
     g->backend_data = 0;
     g->parent = 0;
     g->parent2 = 0;
+    memset(g->sec_group, 0, MAX_SECONDARIES * sizeof(void*));
 
     // space after struct
     g->locationid  = (int*) (((char*)g) + sizeof(Laik_Group));
@@ -541,9 +545,10 @@ Laik_Group* laik_new_shrinked_group(Laik_Group* g, int len, int* list)
     }
     g2->size = o;
     g2->myid = (g->myid < 0) ? -1 : g2->fromParent[g->myid];
-
     if (g->inst->backend->updateGroup)
+    {
         (g->inst->backend->updateGroup)(g->inst->backend, g2);
+    }
 
     if (laik_log_begin(1)) {
         laik_log_append("shrink group: "

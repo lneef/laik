@@ -27,15 +27,14 @@
 void laik_secondaries_cleanup(const Laik_Backend* backend)
 {
   for(int i = 0; i < backend->chain_length; ++i)
-    backend->chain[i]->laik_secondary_cleanup(backend->chain[i]);
+    backend->chain[i]->laik_secondary_cleanup();
 }
 
 void laik_secondaries_finalize(const Laik_Backend* backend)
 {
     for(int i = 0; i < backend -> chain_length; ++i)
     {
-        backend->chain[i]->laik_secondary_finalize(backend->chain[i]);
-        free(backend->chain[i]->groupInfo);
+        backend->chain[i]->laik_secondary_finalize();
         free(backend->chain[i]);
     }
 }
@@ -44,7 +43,7 @@ bool laik_secondaries_prepare(const Laik_Backend* backend, Laik_ActionSeq* as)
 {
     bool changed = false;
     for(int i = backend->chain_length - 1; i > -1; --i)
-    {
+    {   
         changed |= backend->chain[i]->laik_secondary_prepare(backend->chain[i], as);
     }
     return changed;
