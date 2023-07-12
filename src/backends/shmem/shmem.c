@@ -395,21 +395,31 @@ int shmem_finalize()
     return SHMEM_SUCCESS;
 }
 
+static char* saveptr;
 int shmem_secondary_init(Laik_Shmem_Comm* sg, int primaryRank, int primarySize, int* locations, int** newLocations,
                         int** ranks, int (*send)(int *, int, int, void*), int (*recv)(int *, int, int, void*), void* backend_data)
 {
     signal(SIGINT, deleteOpenShmSegs);
+    char* token;
+    if(!saveptr)
+    {
+        char *envRanks = getenv("LAIK_SHMEM_RANKS_PER_ISLANDS");
+        token = envRanks == NULL ? NULL : strtok_r(envRanks, ",", &saveptr);
+    }
+    else{
+        token = strtok_r(saveptr, ",", &saveptr);
+        
+    }
 
-    const char *envRanks = getenv("LAIK_SHMEM_SUB_ISLANDS");
-    int numSubIslands = envRanks == NULL ? 1 : atoi(envRanks);
+    int perIsland = token ? atoi(token) : 1;
     int mask = locations ? locations[primaryRank] : 0;
-    int* sRanks = *ranks;
+    int *sRanks = *ranks;
 
-    if(numSubIslands < 1)
-        laik_panic("RANKS_PER_ISLAND needs to be a number larger than 0");
+    if(perIsland < 1)
+        laik_panic("LAIK_SHMEM_RANKS_PER_ISLANDS needs to be a number larger than 0");
 
     int location = sRanks[primaryRank];
-    int shmAddr = SHM_KEY + pair(mask, location % numSubIslands);
+    int shmAddr = SHM_KEY + pair(mask, location / perIsland);
 
     const char *copyScheme = getenv("LAIK_SHMEM_COPY_SCHEME");
 
@@ -573,7 +583,7 @@ int shmem_secondary_init(Laik_Shmem_Comm* sg, int primaryRank, int primarySize, 
     // Open the own meta info shm segment and set it to ready
     if(headerShmid == -1) createMetaInfoSeg();
 
-    laik_log(2, "Rank:%d on Island:%d", sg->rank, sg->colour);
+    laik_log(1, "Shared Memory Backend: T%d is T%d on Island:%d", primaryRank, sg->rank, sg->colour);
     *newLocations = sg->divsion;
     *ranks = sg->secondaryRanks;
     return SHMEM_SUCCESS;
