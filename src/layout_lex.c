@@ -30,16 +30,12 @@
 // this file implements a layout providing lexicographical ordering (1d/2d/3d)
 // for multiple ranges, requesting a separate allocation for each range
 
-typedef union _Lex_Memory_Header Lex_Memory_Header;
+typedef struct _Lex_Memory_Header Lex_Memory_Header;
 
-union _Lex_Memory_Header
-{
-    struct {
+struct _Lex_Memory_Header{
         Laik_Layout_Memory_Header hd;
         uint64_t count;
         uint64_t stride[3]; 
-    };
-    alignas(64) int x;
 };
 // parameters for one range
 typedef struct _Lex_Entry Lex_Entry;
@@ -490,7 +486,7 @@ unsigned int unpack_lex(Laik_Mapping* m, Laik_Range* s,
     return count;
 }
 
-void laik_layout_alloc_lex(Laik_Mapping* m, char* header, int n)
+void laik_layout_init_lex(Laik_Mapping* m, char* header, int n)
 {
     Laik_Layout_Lex* ll = (Laik_Layout_Lex*)m->layout;
     Lex_Memory_Header* lold = ll->e[n].hd;
@@ -499,7 +495,7 @@ void laik_layout_alloc_lex(Laik_Mapping* m, char* header, int n)
     hd->count = lold->count;
     memcpy(hd->stride, lold->stride, 3 * sizeof(uint64_t));
     strncpy(hd->hd.name, LEX_IDENTIFIER, 9);
-    hd->hd.size = sizeof(Lex_Memory_Header);
+    hd->hd.size = ll->h.header_size;
 
     free(ll->e[n].hd);
     ll->e[n].hd = hd;
@@ -543,12 +539,13 @@ Laik_Layout* laik_new_layout_lex(int n, Laik_Range* ranges)
                      pack_lex,
                      unpack_lex,
                      copy_lex,
-                     laik_layout_alloc_lex,
+                     laik_layout_init_lex,
                      laik_layout_lex_free);
 
     uint64_t count = 0;
     strncpy(l->h.name, LEX_IDENTIFIER, 9);
-    l->h.header_size = sizeof(Lex_Memory_Header);
+    l->h.header_size = PAD(sizeof(Lex_Memory_Header), 64);
+    assert(l->h.header_size >= sizeof(Lex_Memory_Header) && l->h.header_size % 64 == 0);
     
     for(int i = 0; i < n; i++) {
         Lex_Entry* e = &(l->e[i]);
@@ -559,7 +556,7 @@ Laik_Layout* laik_new_layout_lex(int n, Laik_Range* ranges)
         count += e->hd->count;
         
         e->hd->stride[0] = 1;
-        e->hd->hd.size = sizeof(Lex_Memory_Header);
+        e->hd->hd.size = PAD(sizeof(Lex_Memory_Header), 64);;
 
         if (dims > 1) {
             e->hd->stride[1] = range->to.i[0] - range->from.i[0];
