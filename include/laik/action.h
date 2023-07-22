@@ -102,6 +102,9 @@ typedef enum _Laik_ActionType {
     // copy between buffers
     LAIK_AT_BufCopy, LAIK_AT_RBufCopy,
 
+    // secondary backends return to primary
+    LAIK_AT_ReturnToPrimary,
+
     // low-level, backend-specific (50 unique actions should be enough)
     LAIK_AT_Backend = 50, LAIK_AT_Backend_Max = 99
 
@@ -138,6 +141,12 @@ void laik_aseq_free(Laik_ActionSeq* as);
 
 // get sum of sizes of all allocated temporary buffers
 int laik_aseq_bufsize(Laik_ActionSeq* as);
+
+Laik_Action* laik_aseq_begin(Laik_ActionSeq* as);
+
+Laik_Action* laik_aseq_next(Laik_ActionSeq* as);
+
+bool laik_aseq_hasNext(Laik_ActionSeq* as);
 
 
 #endif // LAIK_ACTIONS_H

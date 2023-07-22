@@ -1716,7 +1716,7 @@ void laik_trans_movetoAS(Laik_ActionSeq* as)
     for(int i = 0; i < numSubGroups; ++i)
     {   
         int count = laik_trans_groupCount(t, i);
-        int len = MAX_SECONDARIES + count;
+        int len = MAX_BACKENDS + count;
         as->subgroups[i].tasks = malloc(len * sizeof(int));
         as->subgroups[i].size = len;
 

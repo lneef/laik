@@ -18,17 +18,31 @@
 #ifndef LAIK_CORE_INTERNAL_H
 #define LAIK_CORE_INTERNAL_H
 
-#include <laik.h>         // for Laik_Instance, Laik_Group
+#include "../laik.h"       // for Laik_Instance, Laik_Group
 #include <stdbool.h>      // for bool
 #include <sys/time.h>     // for struct timeval
 #include "definitions.h"  // for MAX_DATAS, MAX_GROUPS, MAX_MAPPINGS
-#include "laik/core.h"
-
 // dynamically generated revision/opt flags information, in info.c
 void laik_log_append_info(void);
 
 // internal structs (see below)
 typedef struct _Laik_ResizeRequests Laik_ResizeRequests;
+
+struct _Laik_Inst_Data
+{
+    unsigned int index; // index of the backend
+    void* backend_data; // backend specific data
+    Laik_Backend* next_backend; // next backend in chain
+
+    // send and recv for secondary backends
+    // are called by backends on lower layers
+    // if no delegation to primary, check if the backend can actually do the communication
+    int (*send)(int*, int, int, Laik_Inst_Data*, Laik_Group*);
+    int (*recv)(int*, int, int, Laik_Inst_Data*, Laik_Group*);
+
+    Laik_Inst_Data* prev; // previous instance data
+    Laik_Inst_Data* next; // next instance data
+};
 
 struct _Laik_Task {
     int rank;
@@ -39,8 +53,7 @@ struct _Laik_Group {
     int gid;         // group ID
     int size;        // number of processes in group
     int myid;        // index of this process (in [0;size[ or -1 if not in group)
-    void* backend_data;
-    void* sec_group[MAX_SECONDARIES];
+    void* backend_data[MAX_BACKENDS];
 
     Laik_Group* parent;
     Laik_Group* parent2; // used in laik_new_union_group
@@ -87,7 +100,8 @@ struct _Laik_Instance {
     struct timeval init_time;
 
     Laik_Backend* backend;
-    void* backend_data;
+    int num_backends;
+    Laik_Inst_Data* inst_data;
 
     Laik_Space* firstSpaceForInstance;
     Laik_Layout_Store* layouts;
@@ -120,6 +134,10 @@ void laik_addSpaceForInstance(Laik_Instance* inst, Laik_Space* s);
 void laik_removeSpaceFromInstance(Laik_Instance* inst, Laik_Space* s);
 
 void laik_addDataForInstance(Laik_Instance* inst, Laik_Data* d);
+
+Laik_Inst_Data* laik_new_inst_data(void* my_data, int index);
+
+Laik_Inst_Data* laik_add_inst_data(Laik_Instance* inst, void* my_data, Laik_Backend* backend);
 
 // synchronize location strings via KVS among processes in current world
 void laik_sync_location(Laik_Instance *instance);

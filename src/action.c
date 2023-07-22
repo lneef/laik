@@ -14,9 +14,8 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-
-#include "laik/action-internal.h"
 #include "laik/action.h"
+#include "laik/action-internal.h"
 #include "laik/space-internal.h"
 #include <laik-internal.h>
 
@@ -91,7 +90,7 @@ void laik_aseq_free(Laik_ActionSeq* as)
 
     if (as->backend) {
         // ask backend to do its own cleanup for this action sequence
-        (as->backend->cleanup)(as->backend, as);
+        (as->backend->cleanup)(as->inst->inst_data, as);
     }
 
     Laik_TransitionContext* tc = as->context[0];
@@ -157,6 +156,7 @@ Laik_Action* laik_aseq_addAction(Laik_ActionSeq* as, unsigned int size,
     a->round = (unsigned char) round;
     a->tid   = (unsigned char) tid;
     a->mark  = 0;
+    a->chain_idx = 0;
 
     if (as->newRoundCount <= round)
         as->newRoundCount = round + 1;
@@ -244,6 +244,11 @@ void laik_aseq_addHalt(Laik_ActionSeq* as)
 {
     // Halt does not need more size then Laik_Action
     laik_aseq_addAction(as, sizeof(Laik_Action), LAIK_At_Halt, 0, 0);
+}
+
+void laik_aseq_addreturntoPrimary(Laik_ActionSeq* as, int round)
+{
+    laik_aseq_addAction(as, sizeof(Laik_Action), LAIK_AT_ReturnToPrimary, round, 0);
 }
 
 // append action to do the transition specified by the transition context ID
@@ -1265,9 +1270,9 @@ bool laik_aseq_combineActions(Laik_ActionSeq* as)
             }
             if (actionCount > 1) {
                 bufSize += countSum;
-                if (laik_aseq_isInGroup(as, ba->inputGroup, myid, -1))
+                if (laik_aseq_isInGroup(as, ba->inputGroup, myid, 0))
                     copyRanges += actionCount;
-                if (laik_aseq_isInGroup(as, ba->outputGroup, myid, -1))
+                if (laik_aseq_isInGroup(as, ba->outputGroup, myid, 0))
                     copyRanges += actionCount;
             }
             break;
@@ -1439,7 +1444,7 @@ bool laik_aseq_combineActions(Laik_ActionSeq* as)
                 unsigned int startBufOff = bufOff;
 
                 // if I provide input: copy pieces into temporary buffer
-                if (laik_aseq_isInGroup(as, ba->inputGroup, myid, -1)) {
+                if (laik_aseq_isInGroup(as, ba->inputGroup, myid, 0)) {
                     laik_aseq_addCopyToRBuf(as, 3 * a->round,
                                             ce + rangeOff,
                                             bufID, 0,
@@ -1469,7 +1474,7 @@ bool laik_aseq_combineActions(Laik_ActionSeq* as)
                                              countSum, ba->redOp);
 
                 // if I want output: copy pieces from temporary buffer
-                if (laik_aseq_isInGroup(as, ba->outputGroup, myid, -1)) {
+                if (laik_aseq_isInGroup(as, ba->outputGroup, myid, 0)) {
                     laik_aseq_addCopyFromRBuf(as, 3 * a->round + 2,
                                               ce + rangeOff,
                                               bufID, 0,
@@ -2013,7 +2018,7 @@ bool laik_aseq_flattenPacking(Laik_ActionSeq* as)
                 char *fromBase, *toBase;
 
                 // if current task is input, fromBase should be allocated
-                if (laik_aseq_isInGroup(as, ba->inputGroup, myid, -1)) {
+                if (laik_aseq_isInGroup(as, ba->inputGroup, myid, 0)) {
                     assert(tc->fromList);
                     assert(ba->fromMapNo < tc->fromList->count);
                     fromMap = &(tc->fromList->map[ba->fromMapNo]);
@@ -2026,7 +2031,7 @@ bool laik_aseq_flattenPacking(Laik_ActionSeq* as)
                 }
 
                 // if current task is receiver, toBase should be allocated
-                if (laik_aseq_isInGroup(as, ba->outputGroup, myid, -1)) {
+                if (laik_aseq_isInGroup(as, ba->outputGroup, myid, 0)) {
                     assert(tc->toList);
                     assert(ba->toMapNo < tc->toList->count);
                     toMap = &(tc->toList->map[ba->toMapNo]);
@@ -2092,19 +2097,19 @@ void laik_aseq_addReduce3Rounds(Laik_ActionSeq* as,
     Laik_Data* data = tc->data;
 
     // do the manual reduction on smallest rank of output group
-    int reduceTask = laik_aseq_taskInGroup(as, ba->outputGroup, 0, -1);
+    int reduceTask = laik_aseq_taskInGroup(as, ba->outputGroup, 0, 0);
     int myid = t->group->myid;
 
     if (myid != reduceTask) {
         // not the reduce task: eventually send input and recv result
 
-        if (laik_aseq_isInGroup(as, ba->inputGroup, myid, -1)) {
+        if (laik_aseq_isInGroup(as, ba->inputGroup, myid, 0)) {
             // send action in round 0
             laik_aseq_addBufSend(as, 3 * ba->h.round,
                                  ba->fromBuf, ba->count, reduceTask);
         }
 
-        if (laik_aseq_isInGroup(as, ba->outputGroup, myid, -1)) {
+        if (laik_aseq_isInGroup(as, ba->outputGroup, myid, 0)) {
             // recv action only in round 2
             laik_aseq_addBufRecv(as, 3 * ba->h.round + 2,
                                  ba->toBuf, ba->count, reduceTask);
@@ -2115,10 +2120,10 @@ void laik_aseq_addReduce3Rounds(Laik_ActionSeq* as,
 
     // we are the reduce task
 
-    int inCount = laik_aseq_groupCount(as, ba->inputGroup, -1);
+    int inCount = laik_aseq_groupCount(as, ba->inputGroup, 0);
     unsigned int byteCount = ba->count * data->elemsize;
 
-    bool inputFromMe = laik_aseq_isInGroup(as, ba->inputGroup, myid, -1);
+    bool inputFromMe = laik_aseq_isInGroup(as, ba->inputGroup, myid, 0);
     assert(inCount >= 0);
     unsigned int inCountWithoutMe = (unsigned int) inCount;
     if (inputFromMe) {
@@ -2145,7 +2150,7 @@ void laik_aseq_addReduce3Rounds(Laik_ActionSeq* as,
         bufOff[0] = 0;
     }
     for(int i = 0; i < inCount; i++) {
-        int inTask = laik_aseq_taskInGroup(as, ba->inputGroup, i, -1);
+        int inTask = laik_aseq_taskInGroup(as, ba->inputGroup, i, 0);
         if (inTask == myid) continue;
 
         laik_aseq_addRBufRecv(as, 3 * ba->h.round,
@@ -2185,9 +2190,9 @@ void laik_aseq_addReduce3Rounds(Laik_ActionSeq* as,
     }
 
     // send result to tasks in output group
-    int outCount = laik_aseq_groupCount(as, ba->outputGroup, -1);
+    int outCount = laik_aseq_groupCount(as, ba->outputGroup, 0);
     for(int i = 0; i< outCount; i++) {
-        int outTask = laik_aseq_taskInGroup(as, ba->outputGroup, i, -1);
+        int outTask = laik_aseq_taskInGroup(as, ba->outputGroup, i, 0);
         if (outTask == myid) {
             // that's myself: nothing to do
             continue;
@@ -2212,12 +2217,12 @@ void laik_aseq_addReduce2Rounds(Laik_ActionSeq* as,
     // everybody sends his input to all others, everybody does reduction
     int myid = t->group->myid;
 
-    bool inputFromMe = laik_aseq_isInGroup(as, ba->inputGroup, myid, -1);
+    bool inputFromMe = laik_aseq_isInGroup(as, ba->inputGroup, myid, 0);
     if (inputFromMe) {
         // send my input to all tasks in output group
-        int outCount = laik_aseq_groupCount(as, ba->outputGroup, -1);
+        int outCount = laik_aseq_groupCount(as, ba->outputGroup, 0);
         for(int i = 0; i< outCount; i++) {
-            int outTask = laik_aseq_taskInGroup(as, ba->outputGroup, i, -1);
+            int outTask = laik_aseq_taskInGroup(as, ba->outputGroup, i, 0);
             if (outTask == myid) {
                 // that's myself: nothing to do
                 continue;
@@ -2228,11 +2233,11 @@ void laik_aseq_addReduce2Rounds(Laik_ActionSeq* as,
         }
     }
 
-    if (!laik_aseq_isInGroup(as, ba->outputGroup, myid, -1)) return;
+    if (!laik_aseq_isInGroup(as, ba->outputGroup, myid, 0)) return;
 
     // I am interested in result, process inputs from others
 
-    int inCount = laik_aseq_groupCount(as, ba->inputGroup, -1);
+    int inCount = laik_aseq_groupCount(as, ba->inputGroup, 0);
     unsigned int byteCount = ba->count * data->elemsize;
 
     // buffer for all partial input values
@@ -2261,7 +2266,7 @@ void laik_aseq_addReduce2Rounds(Laik_ActionSeq* as,
         bufOff[0] = 0;
     }
     for(int i = 0; i < inCount; i++) {
-        int inTask = laik_aseq_taskInGroup(as, ba->inputGroup, i, -1);
+        int inTask = laik_aseq_taskInGroup(as, ba->inputGroup, i, 0);
         if (inTask == myid) continue;
 
         laik_aseq_addRBufRecv(as, 3 * ba->h.round,
@@ -2330,8 +2335,8 @@ bool laik_aseq_splitReduce(Laik_ActionSeq* as)
         switch(a->type) {
         case LAIK_AT_GroupReduce: {
             int inCount, outCount;
-            inCount = laik_aseq_groupCount(as, ba->inputGroup, -1);
-            outCount = laik_aseq_groupCount(as, ba->outputGroup, -1);
+            inCount = laik_aseq_groupCount(as, ba->inputGroup, 0);
+            outCount = laik_aseq_groupCount(as, ba->outputGroup, 0);
             // use simple 3-step reduction if too many messages for 2-step
             if (inCount * outCount > 4 * (inCount + outCount))
                 laik_aseq_addReduce3Rounds(as, tc, ba);
@@ -2370,8 +2375,8 @@ bool laik_aseq_replaceWithAllReduce(Laik_ActionSeq* as)
         // TODO: LAIK_AT_MapGroupReduce
         case LAIK_AT_GroupReduce:
         {
-            int inCount = laik_aseq_groupCount(as, ba->inputGroup, -1);
-            int outCount = laik_aseq_groupCount(as, ba->outputGroup, -1);
+            int inCount = laik_aseq_groupCount(as, ba->inputGroup, 0);
+            int outCount = laik_aseq_groupCount(as, ba->outputGroup, 0);
             if (inCount == allSize) {
                 if (outCount == allSize) {
                     laik_aseq_addReduce(as, a->round, ba->fromBuf, ba->toBuf,
@@ -2379,7 +2384,7 @@ bool laik_aseq_replaceWithAllReduce(Laik_ActionSeq* as)
                     changed = true;
                     continue;
                 }
-                else if (laik_aseq_groupCount(as, ba->outputGroup, -1) == 1) {
+                else if (laik_aseq_groupCount(as, ba->outputGroup, 0) == 1) {
                     int root = laik_trans_taskInGroup(t, ba->outputGroup, 0);
                     laik_aseq_addReduce(as, a->round, ba->fromBuf, ba->toBuf,
                                         ba->count, root, ba->redOp);
@@ -2619,8 +2624,8 @@ void laik_exec_unpack(Laik_BackendAction* a, Laik_Mapping* map)
 
 bool laik_aseq_isInGroup(Laik_ActionSeq* as, int subgroup, int task, int chain_idx)
 {   
-    int count = as -> subgroups[subgroup].count[chain_idx + 1];
-    int offset = as -> subgroups[subgroup].offset[chain_idx + 1];
+    int count = as -> subgroups[subgroup].count[chain_idx];
+    int offset = as -> subgroups[subgroup].offset[chain_idx];
     for(int i = 0; i < count ; ++i)
     {
         if(as->subgroups[subgroup].tasks[offset + i] == task) return true;
@@ -2630,8 +2635,8 @@ bool laik_aseq_isInGroup(Laik_ActionSeq* as, int subgroup, int task, int chain_i
 
 int laik_aseq_taskInGroup(Laik_ActionSeq *as, int subgroup, int i, int chain_idx)
 {
-    int count = as -> subgroups[subgroup].count[chain_idx + 1];
-    int offset = as -> subgroups[subgroup].offset[chain_idx + 1];
+    int count = as -> subgroups[subgroup].count[chain_idx];
+    int offset = as -> subgroups[subgroup].offset[chain_idx];
 
     assert(i < count);
 
@@ -2646,30 +2651,30 @@ void laik_aseq_addSecondaryGroup(Laik_ActionSeq* as, int subgroup, int* ranks, i
     assert(left >= 0);
 
     tg->size = left;
-    tg->offset[chain_idx + 1] = left;
+    tg->offset[chain_idx] = left;
 
     if(rankNum > 0) memcpy(&tg->tasks[left], ranks, rankNum * sizeof(int));
 
-    tg -> count[chain_idx + 1] = rankNum;
+    tg -> count[chain_idx] = rankNum;
 }
 
 void laik_aseq_updateGroup(Laik_ActionSeq* as, int subgroup, int* ranks, int rankNum, int chain_idx)
 {
     TaskGroupAS* tg = &as->subgroups[subgroup];
 
-    assert(rankNum <= tg->count[chain_idx + 1]);
+    assert(rankNum <= tg->count[chain_idx]);
 
-    int offset = tg -> offset[chain_idx + 1];
+    int offset = tg -> offset[chain_idx];
     memcpy(&tg->tasks[offset], ranks, rankNum * sizeof(int));
-    tg->count[chain_idx + 1] = rankNum;
+    tg->count[chain_idx] = rankNum;
 } 
 
 void laik_aseq_updateTask(Laik_ActionSeq* as, int subgroup, int i, int task, int chain_idx)
 {
     TaskGroupAS* tg = &as->subgroups[subgroup];
-    assert(i < tg -> count[chain_idx + 1]);
+    assert(i < tg -> count[chain_idx]);
 
-    int offset = tg -> offset[chain_idx + 1];
+    int offset = tg -> offset[chain_idx];
 
     tg->tasks[offset + i] = task; 
 }
@@ -2677,14 +2682,14 @@ void laik_aseq_updateTask(Laik_ActionSeq* as, int subgroup, int i, int task, int
 void laik_aseq_updateGroupCount(Laik_ActionSeq* as, int subgroup, int count, int chain_idx)
 {
     TaskGroupAS* tg = &as -> subgroups[subgroup];
-    assert(count <= tg->count[chain_idx + 1]);
+    assert(count <= tg->count[chain_idx]);
 
-    tg -> count[chain_idx + 1]= count;
+    tg -> count[chain_idx]= count;
 }
 
 int laik_aseq_groupCount(Laik_ActionSeq* as, int subgroup, int chain_idx)
 {
-    return as -> subgroups[subgroup].count[chain_idx + 1];
+    return as -> subgroups[subgroup].count[chain_idx];
 }
 
 void laik_aseq_removefromAS(Laik_ActionSeq* as)
@@ -2697,4 +2702,31 @@ void laik_aseq_removefromAS(Laik_ActionSeq* as)
     }
 
     free(as->subgroups);
+}
+
+//iteration over action sequence
+
+Laik_Action* laik_aseq_begin(Laik_ActionSeq* as)
+{
+    as -> currentAction = as -> action;
+    as -> currentActionCount = 0; 
+
+    return as -> currentAction;
+}
+
+Laik_Action* laik_aseq_next(Laik_ActionSeq* as)
+{
+    as->currentAction = nextAction(as -> currentAction);
+    as->currentActionCount++;
+    return as -> currentAction;
+}
+
+bool laik_aseq_hasNext(Laik_ActionSeq* as)
+{
+    return as->currentActionCount < as->actionCount;
+}
+
+void laik_aseq_addBHalt(Laik_Inst_Data* idata, Laik_ActionSeq* as)
+{
+    if(idata->next_backend) laik_aseq_addHalt(as);
 }

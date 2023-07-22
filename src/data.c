@@ -160,6 +160,20 @@ void laik_switchstat_free(Laik_SwitchStat* ss, uint64_t bytes)
 
 static int data_id = 0;
 
+// get backend specific allocator
+// currently lowest backend with custom allocator defines allocator for data container
+static Laik_Allocator* allocator(Laik_Instance* inst)
+{
+    Laik_Allocator* (*create)();
+    create = inst->backend->allocator;
+    for(Laik_Inst_Data* c = inst->inst_data; c->next != NULL; c = c->next)
+    {
+        create = c->next_backend->allocator ? c->next_backend->allocator : create;
+    }
+    assert(laik_allocator_def);
+    return create ? create() : laik_allocator_def;
+}
+
 Laik_Data* laik_new_data(Laik_Space* space, Laik_Type* type)
 {
     Laik_Data* d = malloc(sizeof(Laik_Data));
@@ -180,8 +194,8 @@ Laik_Data* laik_new_data(Laik_Space* space, Laik_Type* type)
     d->backend_data = 0;
     d->activePartitioning = 0;
     d->activeMappings = 0;
-    assert(laik_allocator_def);
-    d->allocator = laik_allocator_def; // malloc/free + reuse if possible
+    d->allocator = allocator(space->inst); // malloc/free + reuse if possible
+    assert(d->allocator);
     d->layout_factory = laik_new_layout_lex; // by default, use lex layouts
     d->stat = laik_newSwitchStat();
 
@@ -837,9 +851,10 @@ void doTransition(Laik_Data* d, Laik_Transition* t, Laik_ActionSeq* as,
         // create the action sequence for requested transition on the fly
         as = createTransASeq(d, t, fromList, toList);
 #if 1
-        const Laik_Backend* backend = d->space->inst->backend;
+        Laik_Instance* inst = d->space->inst;
+        const Laik_Backend* backend = inst->backend;
         if (backend->prepare)
-            (backend->prepare)(backend, as);
+            (backend->prepare)(inst->inst_data, as);
         else {
             // for statistics: usually called in backend prepare function
             laik_aseq_calc_stats(as);
@@ -855,7 +870,7 @@ void doTransition(Laik_Data* d, Laik_Transition* t, Laik_ActionSeq* as,
         if (inst->profiling->do_profiling)
             inst->profiling->timer_backend = laik_wtime();
 
-        (inst->backend->exec)(inst->backend, as);
+        (inst->backend->exec)(inst->inst_data, as);
 
         if (inst->profiling->do_profiling)
             inst->profiling->time_backend += laik_wtime() - inst->profiling->timer_backend;
@@ -1238,9 +1253,10 @@ Laik_ActionSeq* laik_calc_actions(Laik_Data* d,
 
 
     Laik_ActionSeq* as = createTransASeq(d, t, fromList, toList);
+    Laik_Instance* inst = d->space->inst;
     const Laik_Backend* backend = d->space->inst->backend;
     if (backend->prepare) {
-        (backend->prepare)(backend, as);
+        (backend->prepare)(inst->inst_data, as);
 
         // remember mappings at prepare time
         Laik_TransitionContext* tc = as->context[0];
@@ -1686,12 +1702,8 @@ Laik_Allocator* laik_get_allocator(Laik_Data* d)
 // returns an allocator with default policy LAIK_MP_NewAllocOnRepartition
 Laik_Allocator* laik_new_allocator_def()
 {
-// TODO make that it compiles independently from the allocator def
-#ifdef USE_SHMEM
-    Laik_Allocator* a = laik_new_allocator(def_shmem_malloc, def_shmem_free, 0);
-#else
     Laik_Allocator* a = laik_new_allocator(def_malloc, def_free, 0);
-#endif
+    
     a->policy = LAIK_MP_NewAllocOnRepartition;
 
     return a;

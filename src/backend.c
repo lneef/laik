@@ -16,6 +16,7 @@
  */
 
 #include "laik-internal.h"
+#include "laik/action-internal.h"
 #include "laik/action.h"
 
 #include <assert.h>
@@ -24,33 +25,34 @@
 
 // generic helpers for backends
 
-void laik_secondaries_cleanup(const Laik_Backend* backend)
+void laik_next_prepare(Laik_Inst_Data* idata, Laik_ActionSeq* as)
 {
-  for(int i = 0; i < backend->chain_length; ++i)
-    backend->chain[i]->laik_secondary_cleanup();
+    if(idata->next_backend) idata->next_backend->prepare(idata->next, as);
 }
 
-void laik_secondaries_finalize(const Laik_Backend* backend)
+void laik_next_cleanup(Laik_Inst_Data* idata, Laik_ActionSeq* as)
 {
-    for(int i = 0; i < backend -> chain_length; ++i)
-    {
-        backend->chain[i]->laik_secondary_finalize();
-        free(backend->chain[i]);
-    }
+    if(idata->next_backend) idata->next_backend->cleanup(idata->next, as);
 }
 
-bool laik_secondaries_prepare(const Laik_Backend* backend, Laik_ActionSeq* as)
+void laik_next_updateGroup(Laik_Inst_Data* idata, Laik_Group* g)
 {
-    bool changed = false;
-    for(int i = backend->chain_length - 1; i > -1; --i)
-    {   
-        changed |= backend->chain[i]->laik_secondary_prepare(backend->chain[i], as);
-    }
-    return changed;
+    if(idata->next_backend) idata->next_backend->updateGroup(idata->next, g);
 }
 
-void laik_secondaries_update_group(const Laik_Backend* backend, Laik_Group* g)
+Laik_Action* laik_next_exec(Laik_Inst_Data* idata, Laik_ActionSeq* as)
 {
-    for(int i = 0; i < backend->chain_length; ++i)
-        backend->chain[i]->laik_secondary_update_group(backend->chain[i], g);
+    if(idata->next_backend) idata->next_backend->exec(idata->next, as);
+    return as->currentAction;
+}
+
+bool laik_next_log(Laik_Inst_Data* idata, Laik_ActionSeq* as, Laik_Action* a)
+{
+    return idata->next_backend ? idata->next_backend->log_action(idata->next, as, a) : false;
+}
+
+void laik_next_finalize(Laik_Inst_Data* idata, Laik_Instance* inst)
+{
+    if(idata->next_backend) idata->next_backend->finalize(idata->next, inst);
+    free(idata);
 }

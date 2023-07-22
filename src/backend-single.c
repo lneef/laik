@@ -18,6 +18,7 @@
 
 #include "laik-internal.h"
 #include "laik-backend-single.h"
+#include "laik/core.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -25,8 +26,8 @@
 #include <stdio.h>
 
 // forward decl
-void laik_single_exec(const Laik_Backend* this, Laik_ActionSeq* as);
-void laik_single_sync(const Laik_Backend* this, Laik_KVStore* kvs);
+void laik_single_exec(Laik_Inst_Data*, Laik_ActionSeq* as);
+void laik_single_sync(Laik_KVStore* kvs);
 
 // C guarantees that unset function pointers are NULL
 static Laik_Backend laik_backend_single = {
@@ -67,9 +68,9 @@ Laik_Group* laik_single_world()
     return single_instance->group[0];
 }
 
-void laik_single_exec(const Laik_Backend* this, Laik_ActionSeq* as)
+void laik_single_exec(Laik_Inst_Data* idata, Laik_ActionSeq* as)
 {
-    (void) this;
+    (void) idata;
     if (as->backend == 0) {
         as->backend = &laik_backend_single;
         laik_aseq_calc_stats(as);
@@ -115,9 +116,8 @@ void laik_single_exec(const Laik_Backend* this, Laik_ActionSeq* as)
     assert(t->sendCount == 0);
 }
 
-void laik_single_sync(const Laik_Backend* this, Laik_KVStore* kvs)
+void laik_single_sync(Laik_KVStore* kvs)
 {   
     // nothing to do
     (void) kvs;
-    (void) this;
 }

@@ -15,9 +15,12 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-# ifdef USE_MPI
-#include "laik-internal.h"
+
+//# ifdef USE_MPI
+#include <laik-internal.h>
 #include "laik-backend-mpi.h"
+#include "laik/action.h"
+#include "laik/backend.h"
 
 #include <laik.h>
 #include <assert.h>
@@ -27,18 +30,19 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
+#include <sys/cdefs.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <string.h>
 
 // forward decls, types/structs , global variables
-static void laik_mpi_finalize(const Laik_Backend* this, Laik_Instance*);
-static void laik_mpi_prepare(const Laik_Backend* this, Laik_ActionSeq*);
-static void laik_mpi_cleanup(const Laik_Backend* this, Laik_ActionSeq*);
-static void laik_mpi_exec(const Laik_Backend* this, Laik_ActionSeq* as);
-static void laik_mpi_updateGroup(const Laik_Backend* this, Laik_Group*);
-static bool laik_mpi_log_action(const Laik_Backend* this, Laik_ActionSeq* as, Laik_Action* a);
-static void laik_mpi_sync(const Laik_Backend* this, Laik_KVStore* kvs);
+static void laik_mpi_finalize(Laik_Inst_Data*, Laik_Instance*);
+static void laik_mpi_prepare(Laik_Inst_Data*, Laik_ActionSeq*);
+static void laik_mpi_cleanup(Laik_Inst_Data*, Laik_ActionSeq*);
+static void laik_mpi_exec(Laik_Inst_Data*, Laik_ActionSeq* as);
+static void laik_mpi_updateGroup(Laik_Inst_Data*, Laik_Group*);
+static bool laik_mpi_log_action(Laik_Inst_Data*, Laik_ActionSeq* as, Laik_Action* a);
+static void laik_mpi_sync(Laik_KVStore* kvs);
 
 
 // C guarantees that unset function pointers are NULL
@@ -174,9 +178,11 @@ static void laik_mpi_addMpiWait(Laik_ActionSeq *as, int round, int req_id)
 }
 
 static
-bool laik_mpi_log_action(const Laik_Backend* this, Laik_ActionSeq* as, Laik_Action* a)
+bool laik_mpi_log_action(Laik_Inst_Data* idata, Laik_ActionSeq* as, Laik_Action* a)
 {
-    (void)this;
+    if(a->chain_idx > idata->index) 
+        return laik_next_log(idata, as, a);
+
     switch(a->type) {
     case LAIK_AT_MpiReq: {
         Laik_A_MpiReq* aa = (Laik_A_MpiReq*) a;
@@ -208,7 +214,7 @@ bool laik_mpi_log_action(const Laik_Backend* this, Laik_ActionSeq* as, Laik_Acti
     }
 
     default:
-        return this->chain[a->chain_idx]->laik_secondary_log_action(this->chain[a->chain_idx], as, a);
+        return false;
     }
     return true;
 }
@@ -296,18 +302,19 @@ static void laik_mpi_panic(int err)
     exit(1);
 }
 
-MPI_Comm initComm;
 
-int sendIntegers(int *buf, int count, int receiver, void* backend_data)
+int sendIntegersMPI(int *buf, int count, int receiver, Laik_Inst_Data* idata, Laik_Group* g)
 {
-    MPIGroupData* gd = (MPIGroupData*) backend_data;
+    (void) idata; // not used
+    MPIGroupData* gd = (MPIGroupData*) g->backend_data[0];
     return MPI_Send(buf, count, MPI_INTEGER, receiver, 0, gd->comm);
 }
 
-int recvIntegers(int *buf, int count, int sender, void* backend_data)
+int recvIntegersMPI(int *buf, int count, int sender, Laik_Inst_Data* idata, Laik_Group* g)
 {
+    (void) idata; // not used 
     MPI_Status st;
-    MPIGroupData* gd = (MPIGroupData*) backend_data;
+    MPIGroupData* gd = (MPIGroupData*) g->backend_data[0];
     return MPI_Recv(buf, count, MPI_INTEGER, sender, 0, gd->comm, &st);
 }
 
@@ -383,7 +390,7 @@ Laik_Instance *laik_init_mpi(int *argc, char ***argv)
     Laik_Group *world = laik_create_group(inst, size);
     world->size = size;
     world->myid = rank; // same as location ID of this process
-    world->backend_data = gd;
+    world->backend_data[0] = gd;
     // initial location IDs are the MPI ranks
     for (int i = 0; i < size; i++)
         world->locationid[i] = i;
@@ -406,13 +413,10 @@ Laik_Instance *laik_init_mpi(int *argc, char ***argv)
         mpi_async = atoi(str); 
 
     // Secondary backend initialization.
-    int (*send)(int *, int, int, void*);
-    int (*recv)(int *, int, int, void*);
-    send = &sendIntegers;
-    recv = &recvIntegers;
-    initComm = d->comm;
-    inst -> backend -> chain_length = 0;
-    laik_init_secondaries(inst, world, rank, size, send, recv);
+
+    inst->inst_data->send = sendIntegersMPI;
+    inst->inst_data->recv = recvIntegersMPI;
+    laik_init_secondaries(inst, world, rank, size);
 
     mpi_instance = inst;
     return inst;
@@ -420,20 +424,18 @@ Laik_Instance *laik_init_mpi(int *argc, char ***argv)
 
 static MPIData *mpiData(Laik_Instance *i)
 {
-    return (MPIData *)i->backend_data;
+    return (MPIData *)i->inst_data->backend_data;
 }
 
 static MPIGroupData *mpiGroupData(Laik_Group *g)
 {
-    return (MPIGroupData *)g->backend_data;
+    return (MPIGroupData *)g->backend_data[0];
 }
 
 static
-void laik_mpi_finalize(const Laik_Backend* this, Laik_Instance* inst)
+void laik_mpi_finalize(Laik_Inst_Data* idata, Laik_Instance* inst)
 {
     assert(inst == mpi_instance);
-
-    laik_secondaries_finalize(this);
 
     if (mpiData(mpi_instance)->didInit)
     {
@@ -442,13 +444,14 @@ void laik_mpi_finalize(const Laik_Backend* this, Laik_Instance* inst)
             laik_mpi_panic(err);
     }
 
+    laik_next_finalize(idata, inst);
+
 }
 
 // update backend specific data for group if needed
 static
-void laik_mpi_updateGroup(const Laik_Backend* this, Laik_Group* g)
+void laik_mpi_updateGroup(Laik_Inst_Data* idata, Laik_Group* g)
 {
-    (void)this;
     // calculate MPI communicator for group <g>
     // TODO: only supports shrinking of parent for now
     assert(g->parent);
@@ -462,10 +465,10 @@ void laik_mpi_updateGroup(const Laik_Backend* this, Laik_Group* g)
     if (g->parent->myid < 0)
         return;
 
-    MPIGroupData *gdParent = (MPIGroupData *)g->parent->backend_data;
+    MPIGroupData *gdParent = (MPIGroupData *)g->parent->backend_data[idata->index];
     assert(gdParent);
     
-    MPIGroupData *gd = (MPIGroupData *)g->backend_data;
+    MPIGroupData *gd = (MPIGroupData *)g->backend_data[idata->index];
     assert(gd == 0); // must not be updated yet
     gd = malloc(sizeof(MPIGroupData));
     if (!gd)
@@ -473,15 +476,15 @@ void laik_mpi_updateGroup(const Laik_Backend* this, Laik_Group* g)
         laik_panic("Out of memory allocating MPIGroupData object");
         exit(1); // not actually needed, laik_panic never returns
     }
-    g->backend_data = gd;
-    laik_secondaries_update_group(this, g);
+    g->backend_data[idata->index] = gd;
     laik_log(1, "MPI Comm_split: old myid %d => new myid %d",
              g->parent->myid, g->fromParent[g->parent->myid]);
-
     int err = MPI_Comm_split(gdParent->comm, g->myid < 0 ? MPI_UNDEFINED : 0,
                              g->myid, &(gd->comm));
     if (err != MPI_SUCCESS)
         laik_mpi_panic(err);
+
+    laik_next_updateGroup(idata, g);
 }
 
 static MPI_Datatype getMPIDataType(Laik_Data *d)
@@ -651,7 +654,7 @@ static void laik_mpi_exec_groupReduce(Laik_TransitionContext *tc,
     Laik_Data *data = tc->data;
 
     // do the manual reduction on smallest rank of output group
-    int reduceTask = laik_aseq_taskInGroup(as, a->outputGroup, 0, -1);
+    int reduceTask = laik_aseq_taskInGroup(as, a->outputGroup, 0, 0);
     laik_log(1, "      exec reduce at T%d", reduceTask);
 
     int myid = t->group->myid;
@@ -662,7 +665,7 @@ static void laik_mpi_exec_groupReduce(Laik_TransitionContext *tc,
     {
         // not the reduce task: eventually send input and recv result
 
-        if (laik_aseq_isInGroup(as, a->inputGroup, myid, -1))
+        if (laik_aseq_isInGroup(as, a->inputGroup, myid, 0))
         {
             laik_log(1, "        exec MPI_Send to T%d", reduceTask);
             err = MPI_Send(a->fromBuf, (int)a->count, dataType,
@@ -670,7 +673,7 @@ static void laik_mpi_exec_groupReduce(Laik_TransitionContext *tc,
             if (err != MPI_SUCCESS)
                 laik_mpi_panic(err);
         }
-        if (laik_aseq_isInGroup(as, a->outputGroup, myid, -1))
+        if (laik_aseq_isInGroup(as, a->outputGroup, myid, 0))
         {
             laik_log(1, "        exec MPI_Recv from T%d", reduceTask);
             err = MPI_Recv(a->toBuf, (int)a->count, dataType,
@@ -687,9 +690,9 @@ static void laik_mpi_exec_groupReduce(Laik_TransitionContext *tc,
     }
 
     // we are the reduce task
-    int inCount = laik_aseq_groupCount(as, a->inputGroup, -1);
+    int inCount = laik_aseq_groupCount(as, a->inputGroup, 0);
     uint64_t byteCount = a->count * data->elemsize;
-    bool inputFromMe = laik_aseq_isInGroup(as, a->inputGroup, myid, -1);
+    bool inputFromMe = laik_aseq_isInGroup(as, a->inputGroup, myid, 0);
 
     // for direct execution: use global <packbuf> (size PACKBUFSIZE)
     // check that bufsize is enough. TODO: dynamically increase?
@@ -711,7 +714,7 @@ static void laik_mpi_exec_groupReduce(Laik_TransitionContext *tc,
     }
     for (int i = 0; i < inCount; i++)
     {
-        int inTask = laik_aseq_taskInGroup(as, a->inputGroup, i, -1);
+        int inTask = laik_aseq_taskInGroup(as, a->inputGroup, i, 0);
         if (inTask == myid)
             continue;
 
@@ -755,10 +758,10 @@ static void laik_mpi_exec_groupReduce(Laik_TransitionContext *tc,
     }
 
     // send result to tasks in output group
-    int outCount = laik_aseq_groupCount(as, a->outputGroup, -1);
+    int outCount = laik_aseq_groupCount(as, a->outputGroup, 0);
     for (int i = 0; i < outCount; i++)
     {
-        int outTask = laik_aseq_taskInGroup(as, a->outputGroup, i, -1);
+        int outTask = laik_aseq_taskInGroup(as, a->outputGroup, i, 0);
         if (outTask == myid)
         {
             // that's myself: nothing to do
@@ -773,9 +776,9 @@ static void laik_mpi_exec_groupReduce(Laik_TransitionContext *tc,
 }
 
 static
-void laik_mpi_exec(const Laik_Backend* this, Laik_ActionSeq* as)
+void laik_mpi_exec(Laik_Inst_Data* idata, Laik_ActionSeq* as)
 {
-    (void)this;
+    (void)idata;
     if (as->actionCount == 0) {
         laik_log(1, "MPI backend exec: nothing to do\n");
         return;
@@ -825,23 +828,27 @@ void laik_mpi_exec(const Laik_Backend* this, Laik_ActionSeq* as)
     int req_count = 0;
     MPI_Request *req = 0;
 
-    Laik_Action *a = as->action;
-    for (unsigned int i = 0; i < as->actionCount; i++, a = nextAction(a))
-    {
+    Laik_Action *a = laik_aseq_begin(as);
+    for (; laik_aseq_hasNext(as); a = laik_aseq_next(as))
+    {   
+        if(a->chain_idx > idata->index) a = laik_next_exec(idata, as);
+
+        if(!laik_aseq_hasNext(as)) return;
+
         Laik_BackendAction *ba = (Laik_BackendAction *)a;
         if (laik_log_begin(1))
         {
             laik_log_Action(a, as);
             laik_log_flush(0);
         }
-
+        
         switch (a->type)
         {
         case LAIK_AT_BufReserve:
         case LAIK_AT_Nop:
+        case LAIK_AT_ReturnToPrimary:
             // no need to do anything
             break;
-
         case LAIK_AT_MpiReq:
         {
             // MPI-specific action: setup MPI_Request array
@@ -1078,11 +1085,9 @@ void laik_mpi_exec(const Laik_Backend* this, Laik_ActionSeq* as)
             break;
 
         default:
-            if(!this->chain[a->chain_idx]->laik_secondary_exec(this->chain[a->chain_idx], as, a)){
-                laik_log(LAIK_LL_Panic, "mpi_exec: no idea how to exec action %d (%s)",
+            laik_log(LAIK_LL_Panic, "mpi_exec: no idea how to exec action %d (%s)",
                          a->type, laik_at_str(a->type));
-                assert(0);
-            }
+            assert(0);
         }
     }
     assert(((char *)as->action) + as->bytesUsed == ((char *)a));
@@ -1120,9 +1125,9 @@ static void laik_mpi_aseq_calc_stats(Laik_ActionSeq *as)
 
 
 static
-void laik_mpi_prepare(const Laik_Backend* this, Laik_ActionSeq* as)
+void laik_mpi_prepare(Laik_Inst_Data* idata, Laik_ActionSeq* as)
 {
-    (void)this;
+    //TODO add secondaries
     if (laik_log_begin(1)) {
         laik_log_append("MPI backend prepare:\n");
         laik_log_ActionSeq(as, false);
@@ -1142,8 +1147,8 @@ void laik_mpi_prepare(const Laik_Backend* this, Laik_ActionSeq* as)
     changed = laik_aseq_sort_2phases(as);
     laik_log_ActionSeqIfChanged(changed, as, "After sorting for deadlock avoidance");
 
-    changed = laik_secondaries_prepare(this, as); 
-    laik_log_ActionSeqIfChanged(changed, as, "After replacing with shmem calls");
+    // call next layer
+    laik_next_prepare(idata, as);
 
     changed = laik_aseq_flattenPacking(as);
     laik_log_ActionSeqIfChanged(changed, as, "After flattening actions");
@@ -1199,7 +1204,7 @@ void laik_mpi_prepare(const Laik_Backend* this, Laik_ActionSeq* as)
     laik_mpi_aseq_calc_stats(as);
 }
 
-static void laik_mpi_cleanup(const Laik_Backend* this, Laik_ActionSeq* as)
+static void laik_mpi_cleanup(Laik_Inst_Data* idata, Laik_ActionSeq* as)
 {
     if (laik_log_begin(1)) {
         laik_log_append("MPI backend cleanup:\n");
@@ -1216,7 +1221,7 @@ static void laik_mpi_cleanup(const Laik_Backend* this, Laik_ActionSeq* as)
         laik_log(1, "  freed MPI_Request array with %d entries", aa->count);
     }
 
-    laik_secondaries_cleanup(this);
+    laik_next_cleanup(idata, as);
 
     laik_aseq_removefromAS(as);
 
@@ -1226,9 +1231,8 @@ static void laik_mpi_cleanup(const Laik_Backend* this, Laik_ActionSeq* as)
 // KV store
 
 
-static void laik_mpi_sync(const Laik_Backend* this, Laik_KVStore* kvs)
+static void laik_mpi_sync(Laik_KVStore* kvs)
 {
-    (void)this;
     assert(kvs->inst == mpi_instance);
     MPI_Comm comm = mpiData(mpi_instance)->comm;
     Laik_Group *world = kvs->inst->world;
@@ -1364,4 +1368,4 @@ static void laik_mpi_sync(const Laik_Backend* this, Laik_KVStore* kvs)
     laik_kvs_changes_free(&changes);
 }
 
-#endif // USE_MPI
+//#endif // USE_MPI

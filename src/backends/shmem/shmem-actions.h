@@ -18,6 +18,7 @@
 #ifndef SHMEM_ACTIONS_H
 #define SHMEM_ACTIONS_H
 #include "backends/shmem/shmem.h"
+#include "laik/core.h"
 #include <laik.h>
 #include <laik-internal.h>
 
@@ -148,34 +149,24 @@ void laik_shmem_addGroupBroadcast(Laik_ActionSeq* as, Laik_BackendAction* ba, in
 
 void laik_shmem_addGroupReduce(Laik_ActionSeq* as, Laik_BackendAction* ba, int round, char* buf, int chain_idx, int primary);
 
-//we probably dont need this action
-void laik_shmem_addShmemReduce(Laik_ActionSeq* as, int round, char* frombuf, char* buf, int count, Laik_ReductionOperation redOp, int tid, int chain_idx);
-
-//we probably dont need this action
-void laik_shmem_addShmemBroadcast(Laik_ActionSeq* as, int round, char* buf, int count, int tid, int chain_idx);
-
 void laik_shmem_addShmemCopyToBuf(Laik_ActionSeq* as, int round, char* buf, char* toBuf, int count, int sender, int receiver, int tid, int chain_idx);
 
 
 //---------------------------------------------------------------------
 // execute secondary specific action
 
-void laik_shmem_exec_GroupBroadCast(Laik_Action* a, Laik_ActionSeq* as, Laik_TransitionContext* tc, Laik_Group* g);
+void laik_shmem_exec_GroupBroadCast(Laik_Action* a, Laik_ActionSeq* as, Laik_TransitionContext* tc, Laik_Inst_Data* idata, Laik_Group* g);
 
-void laik_shmem_exec_GroupReduce(Laik_Action * a, Laik_ActionSeq* as, Laik_TransitionContext* tc, Laik_Group* g);
+void laik_shmem_exec_GroupReduce(Laik_Action * a, Laik_ActionSeq* as, Laik_TransitionContext* tc, Laik_Inst_Data* idata, Laik_Group* g);
 
-void laik_shmem_exec_Reduce(Laik_Action* a, Laik_TransitionContext* tc, Laik_Group* g);
+void laik_shmem_exec_CopyMapToReceiver(Laik_Action* a, Laik_TransitionContext* tc, Laik_Inst_Data* idata, Laik_Group* g);
 
-void laik_shmem_exec_Broadcast(Laik_Action* a, Laik_TransitionContext* tc, Laik_Group* g);
+void laik_shmem_exec_ReceiveMap(Laik_Action* a, Laik_TransitionContext* tc, Laik_Inst_Data* idata, Laik_Group* g);
 
-void laik_shmem_exec_CopyMapToReceiver(Laik_Action* a, Laik_TransitionContext* tc, Laik_Group* g);
+void laik_shmem_exec_MapGroupReduce(Laik_ActionSeq* as, Laik_Action* a, Laik_TransitionContext* tc, Laik_Inst_Data* idata, Laik_Group* g);
 
-void laik_shmem_exec_ReceiveMap(Laik_Action* a, Laik_TransitionContext* tc, Laik_Group* g);
+void laik_shmem_exec_CopyToBuf(Laik_Action* a, Laik_TransitionContext* tc, Laik_Inst_Data* idata, Laik_Group* g);
 
-void laik_shmem_exec_MapGroupReduce(Laik_ActionSeq* as, Laik_Action* a, Laik_TransitionContext* tc, Laik_Group* g);
-
-void laik_shmem_exec_CopyToBuf(Laik_Action* a, Laik_TransitionContext* tc, Laik_Group* g);
-
-void laik_shmem_exec_MapBroadCast(Laik_ActionSeq* as , Laik_Action* a, Laik_TransitionContext* tc, Laik_Group* g);
+void laik_shmem_exec_MapBroadCast(Laik_ActionSeq* as , Laik_Action* a, Laik_TransitionContext* tc, Laik_Inst_Data* idata, Laik_Group* g);
 
 #endif

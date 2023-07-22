@@ -450,7 +450,7 @@ void laik_kvs_sync(Laik_KVStore* kvs)
     laik_log(1, "sync KVS '%s' (progagating %d/%d entries) ...",
              kvs->name, kvs->changes.offUsed / 2, kvs->used);
     kvs->in_sync = true;
-    (b->sync)(b, kvs);
+    (b->sync)(kvs);
     kvs->in_sync = false;
 
     // all queued entries sent, remove

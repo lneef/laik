@@ -24,17 +24,19 @@
 // Do not include this file in LAIK applications!
 //
 
-#include <laik.h>     // for Laik_Transition, Laik_Data, Laik_Instance, Laik...
+#include "../laik.h"     // for Laik_Transition, Laik_Data, Laik_Instance, Laik...
+#include "action.h"
 #include <stdbool.h>  // for bool
 #include "definitions.h" // for maximal number of secondaries
 #include "laik/core.h"
+#include "laik/data.h"
 
 // LAIK communication back-end
 // there is no generic initialization function; laik_init() knowns
 // about available backends, and it calls specific init functions directly
 struct _Laik_Backend {
   char* name;
-  void (*finalize)(const Laik_Backend*, Laik_Instance*);
+  void (*finalize)(Laik_Inst_Data*, Laik_Instance*);
 
   // Record the actions required to do a transition on data, eventually
   // using provided mappings (can be 0 if mappings are not allocated yet).
@@ -51,25 +53,25 @@ struct _Laik_Backend {
   //   plans for one data container.
   // - prepare an optimized communcation schedule using the pre-allocated
   //   resources
-  void (*prepare)(const Laik_Backend*, Laik_ActionSeq*);
+  void (*prepare)(Laik_Inst_Data*, Laik_ActionSeq*);
 
   // free resources allocated for an action sequence
-  void (*cleanup)(const Laik_Backend*, Laik_ActionSeq*);
+  void (*cleanup)(Laik_Inst_Data*, Laik_ActionSeq*);
 
   // execute a action sequence
-  void (*exec)(const Laik_Backend*, Laik_ActionSeq*);
+  void (*exec)(Laik_Inst_Data*, Laik_ActionSeq*);
 
   // update backend specific data for group if needed
-  void (*updateGroup)(const Laik_Backend*, Laik_Group*);
+  void (*updateGroup)(Laik_Inst_Data*, Laik_Group*);
 
   // sync of key-value store
-  void (*sync)(const Laik_Backend*, Laik_KVStore* kvs);
+  void (*sync)(Laik_KVStore* kvs);
 
   // log backend-specific action, return true if handled (see laik_log_Action)
-  bool (*log_action)(const Laik_Backend*, Laik_ActionSeq* as, Laik_Action* a);
+  bool (*log_action)(Laik_Inst_Data*, Laik_ActionSeq* as, Laik_Action* a);
 
   // ensure progress in backend, can be NULL
-  void (*make_progress)(const Laik_Backend*);
+  void (*make_progress)(Laik_Inst_Data*);
 
   // function for elasticity support, to be called by all active
   // processes, resulting in a global synchronization.
@@ -81,45 +83,29 @@ struct _Laik_Backend {
   // TODO:
   // - also handle remove requests via function parameter
   // - sub-world elasticity
-  Laik_Group* (*resize)(const Laik_Backend*, Laik_ResizeRequests*);
+  Laik_Group* (*resize)(Laik_Inst_Data*, Laik_ResizeRequests*);
 
   // for elasticity: removal of processes which got started in a previous
   // resize is finished. They can be marked as dead and resources freed
-  void (*finish_resize)(const Laik_Backend*);
-  
-  Laik_Secondary* chain[MAX_SECONDARIES];
+  void (*finish_resize)(Laik_Inst_Data*);
 
-  unsigned char chain_length;
-};
-struct _Laik_Secondary {
-  //index in chain of secondary backends
-  unsigned chain_idx;
-
-  // delete all buffers allocated by secondary backend
-  void (*laik_secondary_finalize)();
-
-  //prepare action sequence, i.e. replace generic laik actions with backend specific actions
-  bool (*laik_secondary_prepare)(const Laik_Secondary*, Laik_ActionSeq *);
-
-  //execute backend specific action
-  bool (*laik_secondary_exec)(const Laik_Secondary*, Laik_ActionSeq *, Laik_Action *);
-
-  //cleanup temporary buffers
-  void (*laik_secondary_cleanup)();
-
-  //log secondary specific actions
-  bool (*laik_secondary_log_action)(const Laik_Secondary*, Laik_ActionSeq*, Laik_Action *);
-
-  //update secondary groups
-  void (*laik_secondary_update_group)(const Laik_Secondary*, Laik_Group*);
+  Laik_Allocator* (*allocator)();
 };
 
-void laik_secondaries_cleanup(const Laik_Backend* backend);
+void laik_next_prepare(Laik_Inst_Data* idata, Laik_ActionSeq* as);
 
-void laik_secondaries_update_group(const Laik_Backend*, Laik_Group*);
+void laik_next_cleanup(Laik_Inst_Data* idata, Laik_ActionSeq* as);
 
-bool laik_secondaries_prepare(const Laik_Backend* backend, Laik_ActionSeq* as);
+void laik_next_updateGroup(Laik_Inst_Data* idata, Laik_Group* g);
 
-void laik_secondaries_finalize(const Laik_Backend* backend);
+Laik_Action* laik_next_exec(Laik_Inst_Data* idata, Laik_ActionSeq* as);
+
+bool laik_next_log(Laik_Inst_Data* idata, Laik_ActionSeq* as, Laik_Action* a);
+
+void laik_next_finalize(Laik_Inst_Data* idata, Laik_Instance* inst);
+
+#define SEND_INTS(buffer, num, receiver, inst_data, g) (inst_data->prev->send(buffer, num, receiver, inst_data->prev, g))
+
+#define RECV_INTS(buffer, num, sender, inst_data, g) (inst_data->prev->recv(buffer, num, sender, inst_data->prev, g))
 
 #endif // LAIK_BACKEND_H

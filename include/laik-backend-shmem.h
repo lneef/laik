@@ -25,8 +25,7 @@
 
 // create a LAIK instance for this backend.
 // if locations is NULL, all ranks are one the islands
-int laik_shmem_secondary_init(Laik_Instance*, Laik_Group* world, int primaryRank, int primarySize, int* locations, int** newLocations, int** ranks,  
-                                int (*send)(int *, int, int, void*), int (*recv)(int *, int, int, void*), void* backend_data);
+int laik_shmem_secondary_init(Laik_Instance*, Laik_Group* world, int primaryRank, int primarySize, int* locations, int** newLocations, int** ranks);
 
 
 #endif // LAIK_BACKEND_SHMEM_H

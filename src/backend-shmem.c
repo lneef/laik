@@ -23,7 +23,11 @@
 #include "backends/shmem/shmem-allocator.h"
 #include "backends/shmem/shmem-actions.h"
 #include "laik/action-internal.h"
+#include "laik/action.h"
+#include "laik/backend.h"
+#include "laik/core-internal.h"
 #include "laik/core.h"
+#include "laik/data.h"
 #include "laik/debug.h"
 
 #include <assert.h>
@@ -41,13 +45,25 @@
 #include <time.h>
 
 // forward decls, types/structs , global variables
-static void laik_shmem_secondary_finalize();
-static bool laik_shmem_secondary_prepare(const Laik_Secondary*, Laik_ActionSeq *);
-static bool laik_shmem_secondary_exec(const Laik_Secondary*, Laik_ActionSeq *, Laik_Action *);
-static void laik_shmem_secondary_cleanup();
-static bool laik_shmem_log_action(const Laik_Secondary*, Laik_ActionSeq*, Laik_Action *);
-static void laik_shmem_update_group(const Laik_Secondary*, Laik_Group*);
+static void laik_shmem_secondary_finalize(Laik_Inst_Data*, Laik_Instance*);
+static void laik_shmem_secondary_prepare(Laik_Inst_Data*, Laik_ActionSeq *);
+static void laik_shmem_secondary_exec(Laik_Inst_Data*, Laik_ActionSeq *);
+static void laik_shmem_secondary_cleanup(Laik_Inst_Data*, Laik_ActionSeq*);
+static bool laik_shmem_log_action(Laik_Inst_Data*, Laik_ActionSeq*, Laik_Action *);
+static void laik_shmem_update_group(Laik_Inst_Data*, Laik_Group*);
+static Laik_Allocator* shmem_allocator();
 
+static Laik_Backend shmem_backend = {
+    .finalize = laik_shmem_secondary_finalize,
+    .exec = laik_shmem_secondary_exec,
+    .prepare = laik_shmem_secondary_prepare,
+    .cleanup = laik_shmem_secondary_cleanup,
+    .log_action = laik_shmem_log_action,
+    .updateGroup = laik_shmem_update_group,
+    .allocator = shmem_allocator
+};
+
+static Laik_Allocator* shmemAllocator;
 //----------------------------------------------------------------------------
 // error helpers
 
@@ -63,12 +79,12 @@ static void laik_shmem_panic(int err)
     exit(1);
 }
 
-void laik_shmem_update_group(const Laik_Secondary* this, Laik_Group* g)
+void laik_shmem_update_group(Laik_Inst_Data* idata, Laik_Group* g)
 {   
     if(g->myid < 0) return;
     Laik_Shmem_Comm* sg = malloc(sizeof(Laik_Shmem_Comm));
     Laik_Group* old = g->parent;
-    Laik_Shmem_Comm* sgOld = (Laik_Shmem_Comm*) old->sec_group[this->chain_idx];
+    Laik_Shmem_Comm* sgOld = (Laik_Shmem_Comm*) old->backend_data[idata->index];
     *sg = *sgOld; 
 
     sg->primaryRanks = malloc(sizeof(int) * sgOld->size);
@@ -113,152 +129,51 @@ void laik_shmem_update_group(const Laik_Secondary* this, Laik_Group* g)
         int oldRank = g->toParent[i];
         sg->divsion[i] = sgOld->divsion[oldRank];
     }
-    g->sec_group[this->chain_idx] = (Laik_Secondary_Group*) sg;
+    g->backend_data[idata->index] = sg;
 
     for(int i = 0; i < g->size; ++i)
     {
         laik_log_append("%d", sg->divsion[i]);
     }
     laik_log_flush("");
+
+    //call next layer
+    laik_next_updateGroup(idata, g);
 }
 
-/*
-static void laik_shmem_exec_packAndSend(Laik_Mapping *map, Laik_Range *range, int to_rank, uint64_t slc_size, int dataType)
+static int sendIntegersShmem(int* buffer, int count, int receiver, Laik_Inst_Data* idata, Laik_Group* g)
 {
-    Laik_Index idx = range->from;
-    int dims = range->space->dims;
-    unsigned int packed;
-    uint64_t count = 0;
-    while (1)
-    {
-        packed = (map->layout->pack)(map, range, &idx, packbuf, PACKBUFSIZE);
-        assert(packed > 0);
-        int err = shmem_send(packbuf, (int)packed, dataType, to_rank);
-        if (err != SHMEM_SUCCESS)
-            laik_shmem_panic(err);
-
-        count += packed;
-        if (laik_index_isEqual(dims, &idx, &(range->to)))
-            break;
-    }
-    assert(count == slc_size);
+    return SEND_INTS(buffer, count, receiver, idata, g);
 }
 
-static void laik_shmem_exec_recvAndUnpack(Laik_Mapping *map, Laik_Range *range, int from_rank, uint64_t slc_size, int elemsize, int dataType)
+static int recvIntegersShmem(int* buffer, int count, int sender, Laik_Inst_Data* idata, Laik_Group* g)
 {
-    Laik_Index idx = range->from;
-    int dims = range->space->dims;
-    int recvCount, unpacked;
-    uint64_t count = 0;
-    while (1)
-    {
-        int err = shmem_recv(packbuf, PACKBUFSIZE / elemsize, dataType, from_rank, &recvCount);
-        if (err != SHMEM_SUCCESS)
-            laik_shmem_panic(err);
-
-        unpacked = (map->layout->unpack)(map, range, &idx, packbuf, recvCount * elemsize);
-        assert(recvCount == unpacked);
-        count += unpacked;
-        if (laik_index_isEqual(dims, &idx, &(range->to)))
-            break;
-    }
-    assert(count == slc_size);
-}
-*/
-static void shmem_init_secondary(Laik_Secondary* secondary)
-{
-    secondary->laik_secondary_prepare = laik_shmem_secondary_prepare;
-    secondary->laik_secondary_exec = laik_shmem_secondary_exec;
-    secondary->laik_secondary_log_action = laik_shmem_log_action;
-    secondary->laik_secondary_cleanup = laik_shmem_secondary_cleanup;
-    secondary->laik_secondary_finalize = laik_shmem_secondary_finalize;
-    secondary->laik_secondary_update_group = laik_shmem_update_group;
+    return RECV_INTS(buffer, count, sender, idata, g);
 }
 // Secondary backend functionality
-int laik_shmem_secondary_init(Laik_Instance* inst, Laik_Group* world, int primaryRank, int primarySize, int* locations , int** newLocations, int** ranks, 
-                                int (*send)(int *, int, int, void*), int (*recv)(int *, int, int, void*), void* backend_data)
+int laik_shmem_secondary_init(Laik_Instance* inst, Laik_Group* world, int primaryRank, int primarySize, int* locations , int** newLocations, int** ranks)
 {  
-    Laik_Secondary* shmem = malloc(sizeof(Laik_Secondary));
+    unsigned int index = inst->num_backends++;
+    Laik_Inst_Data* idata = laik_add_inst_data(inst, NULL, &shmem_backend);
+    idata->recv = recvIntegersShmem;
+    idata->send = sendIntegersShmem;
+    assert(index == idata->index);
+    
     Laik_Shmem_Comm* shmemg = malloc(sizeof(Laik_Shmem_Comm));
-    shmem_init_secondary(shmem);
-    unsigned char idx = inst->backend->chain_length++;
-    shmem->chain_idx = idx;
-    world -> sec_group[idx] = (Laik_Shmem_Comm*) shmemg;
+    world -> backend_data[index] = (Laik_Shmem_Comm*) shmemg;
 
-    int ret = shmem_secondary_init(shmemg, primaryRank, primarySize, locations, newLocations, ranks, send, recv, backend_data);
-    inst -> backend -> chain[idx] = shmem;
+    int ret = shmem_secondary_init(shmemg, idata, world, primaryRank, primarySize, locations, newLocations, ranks);
 
     return ret;
 }
 
-void laik_shmem_secondary_finalize()
+void laik_shmem_secondary_finalize(Laik_Inst_Data* idata, Laik_Instance* inst)
 {   
+    laik_log(1, "Shmem finalize");
     shmem_finalize(NULL);
-}
 
-static void shmem_replace_reduce(Laik_ActionSeq *as, Laik_BackendAction* ba, Laik_TransitionContext* tc, Laik_Shmem_Comm* sg, int chain_idx)
-{    
-    int master = ba -> rank;
-
-    unsigned char rd = 3 * ba -> h.round;
-    int size, rank, numIslands;
-    int* secondaryRanks;
-        
-    shmem_comm_rank(sg, &rank);
-    shmem_comm_size(sg, &size);
-    shmem_get_numIslands(sg, &numIslands);
-    shmem_get_secondaryRanks(sg, &secondaryRanks);
-
-    Laik_Data* data = tc -> data;
-    Laik_Transition* t = tc->transition;
-    unsigned int bufSize = 2 * data -> elemsize * ba->count;
-    char *reducebuf;
-
-    if(rank == 0)
-    {
-        reducebuf = def_shmem_malloc(NULL, bufSize);
-        laik_shmem_addShmemReduce(as, rd, ba->fromBuf, reducebuf, ba -> count,ba -> redOp, ba->h.tid, chain_idx);
-    }
-    else 
-    {
-        Laik_A_BufSend* a;
-        a = (Laik_A_BufSend*) laik_aseq_addAction(as, sizeof(*a), LAIK_AT_ShmemBufSend, rd, 0);
-        a->h.chain_idx = chain_idx;
-        a->count = ba->count;
-        a->to_rank = 0;
-        a->buf = ba -> fromBuf;
-    }
-
-    ++rd;
-
-    if(rank == 0 ||  t->group->myid == master)
-    {   
-        if(numIslands == 1)
-            laik_shmem_addShmemCopyToBuf(as, rd, reducebuf, ba->toBuf, ba->count, 0, master == -1 ? 0 : secondaryRanks[master], ba->h.tid, chain_idx);
-        else
-            laik_aseq_addGroupReduce(as, rd, ba->inputGroup, ba->outputGroup, reducebuf, ba->toBuf, ba->count, ba -> redOp);
-    }
-    ++rd;
-
-    if(master == -1)
-    {   
-        if(rank == 0)
-        {
-            laik_shmem_addShmemBroadcast(as, rd, ba->toBuf, ba->count, ba->h.tid, chain_idx);
-        }
-        else
-        {
-            Laik_A_BufRecv* a;
-            a = (Laik_A_BufRecv*) laik_aseq_addAction(as, sizeof(*a),
-                                             LAIK_AT_ShmemBufRecv, rd, ba->h.tid);
-
-            a->h.chain_idx = chain_idx;
-            a -> count = ba -> count;
-            a->from_rank = 0;
-            a->buf = ba -> toBuf;
-        }
-
-    }
+    //call next layer 
+    laik_next_finalize(idata, inst);
 }
 
 static void shmem_replace_groupReduce(Laik_ActionSeq* as, Laik_BackendAction* ba, Laik_TransitionContext* tc, Laik_Shmem_Comm* sg, int chain_idx){
@@ -369,10 +284,13 @@ void shmem_replace_MapGroupReduce(Laik_ActionSeq* as, Laik_Action* a, Laik_Trans
 
 }
 
-void laik_shmem_secondary_cleanup()
+void laik_shmem_secondary_cleanup(Laik_Inst_Data* idata, Laik_ActionSeq* as)
 {   
     laik_log(1, "Shared Memory Backend Cleanup");
     shmem_manager_cleanup();
+
+    // call next layer for cleanup
+    laik_next_cleanup(idata, as);
    
 }
 //https://graphics.stanford.edu/~seander/bithacks.html#IntegerMinOrMaxS
@@ -381,10 +299,14 @@ static int max(int x , int y)
     return x ^ ((x ^ y) & -(x < y));
 }
 
-bool laik_shmem_secondary_prepare(const Laik_Secondary* this, Laik_ActionSeq *as)
+void laik_shmem_secondary_prepare(Laik_Inst_Data* idata, Laik_ActionSeq *as)
 {
+    // at first go down the chain
+    // call next layer for preparation
+    laik_next_prepare(idata, as);
+
     Laik_TransitionContext* tc = as->context[0];
-    Laik_Shmem_Comm* sg = (Laik_Shmem_Comm*) tc->transition->group->sec_group[this->chain_idx];
+    Laik_Shmem_Comm* sg = (Laik_Shmem_Comm*) tc->transition->group->backend_data[idata->index];
     int size, rank;
     shmem_comm_size(sg, &size);
     shmem_comm_rank(sg, &rank);
@@ -392,16 +314,15 @@ bool laik_shmem_secondary_prepare(const Laik_Secondary* this, Laik_ActionSeq *as
     shmem_get_colours(sg, &colours);
     int *secondaryRanks;
     shmem_get_secondaryRanks(sg, &secondaryRanks);
-
     
     Laik_Transition* t = tc->transition;
 
     int pRank = t->group->myid;
-    const int chain_idx = this -> chain_idx;
+    const int chain_idx = idata->index;
 
     shmem_transformSubGroup(as, sg, chain_idx);
 
-    bool global_ret = false;
+    bool changed = false;
     bool ret = false;
     Laik_Action *a = as->action;
     for (unsigned int i = 0; i < as->actionCount; i++, a = nextAction(a))
@@ -409,19 +330,6 @@ bool laik_shmem_secondary_prepare(const Laik_Secondary* this, Laik_ActionSeq *as
         ret = false;
         switch (a->type)
         {
-        /*
-        case LAIK_AT_MapSend:
-        {
-            Laik_BackendAction *ba = (Laik_BackendAction *)a;
-            if(colours[pRank] == colours[ba->rank]){
-                ba = (Laik_BackendAction*) laik_aseq_addr(a, as, 3 * a->round, chain_idx);
-                ba->rank = secondaryRanks[ba->rank];
-                ba->h.type = LAIK_AT_ShmemMapSend;
-                ret = true;
-            }
-            break;
-        }
-        */
         case LAIK_AT_GroupReduce:
         {   
             Laik_BackendAction* ba = (Laik_BackendAction*) a;
@@ -429,124 +337,24 @@ bool laik_shmem_secondary_prepare(const Laik_Secondary* this, Laik_ActionSeq *as
             ret = true;
             break;
         }
-        /*
-        case LAIK_AT_Reduce:
-        {
-            Laik_BackendAction* ba = (Laik_BackendAction*) a;
-            shmem_replace_reduce(as, ba, tc, sg, chain_idx);
-            ret = true;
-            break;
-        }
-        case LAIK_AT_BufSend:
-        {
-            Laik_A_BufSend *aa = (Laik_A_BufSend *)a;
-            if(colours[pRank] == colours[aa->to_rank]){
-                aa = (Laik_A_BufSend*) laik_aseq_addr(a, as, 3 * a->round, chain_idx);
-                aa->to_rank = secondaryRanks[aa->to_rank];
-                aa->h.type = LAIK_AT_ShmemBufSend;
-                ret = true;
-            }
-            break;
-        }
-        case LAIK_AT_MapRecv:
-        {
-            Laik_BackendAction *ba = (Laik_BackendAction *)a;
-            if(colours[pRank] == colours[ba->rank]){
-                ba = (Laik_BackendAction*) laik_aseq_addr(a, as, 3 * a->round, chain_idx);
-                ba->rank = secondaryRanks[ba->rank];
-                ba->h.type = LAIK_AT_ShmemMapRecv;
-                ret = true;
-            }
-            break;
-        }
-        case LAIK_AT_BufRecv:
-        {
-            Laik_A_BufRecv *aa = (Laik_A_BufRecv *)a;
-            if(colours[pRank] == colours[aa->from_rank]){
-                aa = (Laik_A_BufRecv*) laik_aseq_addr(a, as, 3 * a->round, chain_idx);
-                aa->from_rank = secondaryRanks[aa->from_rank];
-                aa->h.type = LAIK_AT_ShmemBufRecv;
-                ret = true;
-            }
-            break;
-        }
-        */
         case LAIK_AT_MapPackAndSend:
         {
             Laik_A_MapPackAndSend *aa = (Laik_A_MapPackAndSend *)a;
             if(colours[pRank] == colours[aa->to_rank]){
                 shmem_replace_MapPackAndSend(as, a, sg, chain_idx);
-                /*
-                aa = (Laik_A_MapPackAndSend*) laik_aseq_addr(a, as, 3 * a->round, chain_idx);
-                aa->to_rank = secondaryRanks[aa->to_rank];
-                aa->h.type = LAIK_AT_ShmemMapPackAndSend;
-                */
                 ret = true;
             }
             break;
         }
-        /*
-        case LAIK_AT_PackAndSend:
-        {
-            Laik_BackendAction *ba = (Laik_BackendAction *)a;
-            if(colours[pRank] == colours[ba->rank]){
-                ba = (Laik_BackendAction*) laik_aseq_addr(a, as, 3 * a->round, chain_idx);
-                ba->rank = secondaryRanks[ba->rank];
-                ba->h.type = LAIK_AT_ShmemPackAndSend;
-                ret = true;
-            }
-            break;
-        }
-        */
         case LAIK_AT_MapRecvAndUnpack:
         {
             Laik_A_MapRecvAndUnpack *aa = (Laik_A_MapRecvAndUnpack *)a;
             if(colours[pRank] == colours[aa->from_rank]){
                 shmem_replace_MapRecvAndUnpack(as, a, sg, chain_idx);
-                /*
-                aa = (Laik_A_MapRecvAndUnpack*) laik_aseq_addr(a, as, 3 * a->round, chain_idx);
-                aa->from_rank = secondaryRanks[aa->from_rank];
-                aa->h.type = LAIK_AT_ShmemMapRecvAndUnpack;
-                */
                 ret = true;
             }
             break;
         }
-        /*
-        case LAIK_AT_RecvAndUnpack:
-        {
-            Laik_BackendAction *ba = (Laik_BackendAction *)a;
-            if(colours[pRank] == colours[ba->rank]){
-                ba = (Laik_BackendAction*) laik_aseq_addr(a, as, 3 * a->round, chain_idx);
-                ba->rank = secondaryRanks[ba->rank];
-                ba->h.type = LAIK_AT_ShmemRecvAndUnpack;
-                ret = true;
-            }
-            break;
-        }
-        case LAIK_AT_RBufSend:
-        {
-            Laik_A_RBufSend *aa = (Laik_A_RBufSend *)a;
-            if(colours[rank] == colours[aa->to_rank]){
-                aa = (Laik_A_RBufSend *) laik_aseq_addr(a, as, 3 * a->round, chain_idx);
-                aa->to_rank = secondaryRanks[aa->to_rank];
-                aa->h.type = LAIK_AT_ShmemRBufSend;
-                ret = true;
-            }
-            break;
-        }
-        case LAIK_AT_RBufRecv:
-        {
-            Laik_A_RBufRecv *aa = (Laik_A_RBufRecv *)a;
-            if(colours[rank] == colours[aa->from_rank]){
-                aa = (Laik_A_RBufRecv *) laik_aseq_addr(a, as, 3 * a->round, chain_idx);
-                aa->from_rank = secondaryRanks[aa->from_rank];
-                aa->h.type = LAIK_AT_ShmemRBufRecv;
-                ret = true;
-            }
-            break;
-        }
-        */
         case LAIK_AT_MapGroupReduce:
         {
             shmem_replace_MapGroupReduce(as, a, tc, sg, chain_idx);
@@ -557,8 +365,7 @@ bool laik_shmem_secondary_prepare(const Laik_Secondary* this, Laik_ActionSeq *as
             break;
         }
 
-        global_ret |= ret;
-
+        changed |= ret;
         if(!ret)
             laik_aseq_add(a, as, 3 * a->round);
 
@@ -566,176 +373,114 @@ bool laik_shmem_secondary_prepare(const Laik_Secondary* this, Laik_ActionSeq *as
         
     }
     laik_aseq_activateNewActions(as);
-    return global_ret;
+    laik_log_ActionSeqIfChanged(changed, as, "After shmem prepare");
 }
 
-bool laik_shmem_secondary_exec(const Laik_Secondary* this, Laik_ActionSeq *as, Laik_Action *a)
+void laik_shmem_secondary_exec(Laik_Inst_Data* idata, Laik_ActionSeq *as)
 {
     
     Laik_TransitionContext *tc = as->context[0];
     Laik_Group* g = tc->transition->group;
     Laik_Data* data = tc->data;
-
+    unsigned int index = idata->index;
     int err;
-    switch (a->type)
+
+    // primary backend should have called laik_aseq_begin
+    Laik_Action* a = as->currentAction;
+    for(; laik_aseq_hasNext(as); a = laik_aseq_next(as))
     {
-    case LAIK_AT_ShmemGroupBroadcast:
-    {
-        assert(a->chain_idx == this ->chain_idx);
-        laik_shmem_exec_GroupBroadCast(a, as, tc, g);
-        break;
+        if(a->chain_idx > idata->index) a = laik_next_exec(idata, as);
+
+        if(!laik_aseq_hasNext(as)) return;
+
+        if(a->chain_idx < idata->index) return;
+
+        if(laik_log_begin(1))
+        {
+            laik_shmem_log_action(idata, as, a);
+            laik_log_flush(0);
+        }
+
+        switch (a->type)
+        {
+        case LAIK_AT_ShmemGroupBroadcast:
+        {
+            assert(a->chain_idx == index);
+            laik_shmem_exec_GroupBroadCast(a, as, tc, idata, g);
+            break;
+        }
+        case LAIK_AT_ShmemGroupReduce:
+        {   
+            assert(a->chain_idx == index);
+            laik_shmem_exec_GroupReduce(a, as, tc, idata, g);
+            break;
+        }
+        case LAIK_AT_ShmemCopyToBuf:
+        {
+            assert(a->chain_idx == index);
+            laik_shmem_exec_CopyToBuf(a, tc, idata, g);
+            break;
+        }
+        case LAIK_AT_ShmemMapGroupReduce:
+        {
+            assert(a->chain_idx == index);
+            laik_shmem_exec_MapGroupReduce(as, a, tc, idata, g);
+            break;
+        }
+        case LAIK_AT_ShmemMapBroadcast:
+        {
+            assert(a->chain_idx == index);
+            laik_shmem_exec_MapBroadCast(as, a, tc, idata, g);
+            break;
+        }
+        case LAIK_AT_ShmemBufSend:
+        {
+            assert(a->chain_idx == index);
+            Laik_A_BufSend* aa = (Laik_A_BufSend*) a;
+            err = shmem_send(aa->buf, aa->count, data->elemsize, aa->to_rank, idata, g);
+            if (err != SHMEM_SUCCESS) 
+                laik_shmem_panic(err);
+            break;
+        }
+        case LAIK_AT_ShmemBufRecv:
+        {
+            assert(a->chain_idx == index);
+            int count;
+            Laik_A_BufRecv* aa = (Laik_A_BufRecv*) a;
+            err = shmem_recv(aa->buf, aa->count, data->elemsize, aa->from_rank, &count, idata, g);
+            if (err != SHMEM_SUCCESS) 
+                laik_shmem_panic(err);
+            //assert((int)ba->count == count);
+            break;
+        }
+        case LAIK_AT_ShmemCopyMapToReceiver:
+        {
+            assert(a->chain_idx == index);
+            laik_shmem_exec_CopyMapToReceiver(a, tc, idata, g);
+            break;
+        }
+        case LAIK_AT_ShmemReceiveMap:
+        {
+            assert(a->chain_idx == index);
+            laik_shmem_exec_ReceiveMap(a, tc, idata, g);
+            break;
+        }
+        default:
+            laik_log(LAIK_LL_Panic, "shmem_secondary_exec: no idea how to exec action %d (%s)",
+                         a->type, laik_at_str(a->type));
+        }
     }
-    case LAIK_AT_ShmemGroupReduce:
-    {   
-        assert(a->chain_idx == this ->chain_idx);
-        laik_shmem_exec_GroupReduce(a, as, tc, g);
-        break;
-    }
-    case LAIK_AT_ShmemCopyToBuf:
-    {
-        assert(a->chain_idx == this ->chain_idx);
-        laik_shmem_exec_CopyToBuf(a, tc, g);
-        break;
-    }
-    case LAIK_AT_ShmemReduce:
-    {
-        assert(a->chain_idx == this ->chain_idx);
-        laik_shmem_exec_Reduce(a, tc, g);
-        break;
-    }
-    case LAIK_AT_ShmemBroadcast:
-    {
-        assert(a->chain_idx == this ->chain_idx);
-        laik_shmem_exec_Broadcast(a, tc, g);
-        break;
-    }
-    case LAIK_AT_ShmemMapGroupReduce:
-    {
-        assert(a->chain_idx == this ->chain_idx);
-        laik_shmem_exec_MapGroupReduce(as, a, tc, g);
-        break;
-    }
-    case LAIK_AT_ShmemMapBroadcast:
-    {
-        assert(a->chain_idx == this ->chain_idx);
-        laik_shmem_exec_MapBroadCast(as, a, tc, g);
-        break;
-    }
-    /*
-    case LAIK_AT_ShmemMapSend:
-    {
-        assert(ba->fromMapNo < fromList->count);
-        Laik_Mapping *fromMap = &(fromList->map[ba->fromMapNo]);
-        assert(fromMap->base != 0);
-        err = shmem_send(fromMap->base + ba->offset, ba->count, dType, ba->rank);
-        if (err != SHMEM_SUCCESS)
-            laik_shmem_panic(err);
-        break;
-    }
-    */
-    case LAIK_AT_ShmemBufSend:
-    {
-        assert(a->chain_idx == this ->chain_idx);
-        Laik_A_BufSend* aa = (Laik_A_BufSend*) a;
-        err = shmem_send(aa->buf, aa->count, data->elemsize, aa->to_rank, (Laik_Shmem_Comm*)g->sec_group[a->chain_idx], g->backend_data);
-        if (err != SHMEM_SUCCESS) 
-            laik_shmem_panic(err);
-        break;
-    }
-    /*
-    case LAIK_AT_ShmemMapRecv:
-    {
-        assert(ba->toMapNo < toList->count);
-        Laik_Mapping *toMap = &(toList->map[ba->toMapNo]);
-        assert(toMap->base != 0);
-        err = shmem_recv(toMap->base + ba->offset, ba->count, dType, ba->rank, &count);
-        if (err != SHMEM_SUCCESS)
-            laik_shmem_panic(err);
-        assert((int)ba->count == count);
-        break;
-    }
-    */
-    case LAIK_AT_ShmemBufRecv:
-    {
-        assert(a->chain_idx == this ->chain_idx);
-        int count;
-        Laik_A_BufRecv* aa = (Laik_A_BufRecv*) a;
-        err = shmem_recv(aa->buf, aa->count, data->elemsize, aa->from_rank, &count, (Laik_Shmem_Comm*)g->sec_group[a->chain_idx], g->backend_data);
-        if (err != SHMEM_SUCCESS) 
-            laik_shmem_panic(err);
-        //assert((int)ba->count == count);
-        break;
-    }
-    /*
-    case LAIK_AT_ShmemMapPackAndSend:
-    {
-        Laik_A_MapPackAndSend *aa = (Laik_A_MapPackAndSend *)a;
-        assert(aa->fromMapNo < fromList->count);
-        Laik_Mapping *fromMap = &(fromList->map[aa->fromMapNo]);
-        assert(fromMap->base != 0);
-        laik_shmem_exec_packAndSend(fromMap, aa->range, aa->to_rank, aa->count, dType);
-        break;
-    }
-    case LAIK_AT_ShmemPackAndSend:
-    {
-        laik_shmem_exec_packAndSend(ba->map, ba->range, ba->rank, (uint64_t)ba->count, dType);
-        break;
-    }
-    case LAIK_AT_ShmemMapRecvAndUnpack:
-    {
-        Laik_A_MapRecvAndUnpack *aa = (Laik_A_MapRecvAndUnpack *)a;
-        assert(aa->toMapNo < toList->count);
-        Laik_Mapping *toMap = &(toList->map[aa->toMapNo]);
-        assert(toMap->base);
-        laik_shmem_exec_recvAndUnpack(toMap, aa->range, aa->from_rank, aa->count, elemsize, dType);
-        break;
-    }
-    case LAIK_AT_ShmemRecvAndUnpack:
-    {
-        laik_shmem_exec_recvAndUnpack(ba->map, ba->range, ba->rank, (uint64_t)ba->count, elemsize, dType);
-        break;
-    }
-    case LAIK_AT_ShmemRBufSend:
-    {
-        Laik_A_RBufSend *aa = (Laik_A_RBufSend *)a;
-        assert(aa->bufID < ASEQ_BUFFER_MAX);
-        err = shmem_send(as->buf[aa->bufID] + aa->offset, aa->count, dType, aa->to_rank);
-        if (err != SHMEM_SUCCESS)
-            laik_shmem_panic(err);
-        break;
-    }
-    case LAIK_AT_ShmemRBufRecv:
-    {
-        Laik_A_RBufRecv *aa = (Laik_A_RBufRecv *)a;
-        assert(aa->bufID < ASEQ_BUFFER_MAX);
-        err = shmem_recv(as->buf[aa->bufID] + aa->offset, aa->count, dType, aa->from_rank, &count);
-        if (err != SHMEM_SUCCESS)
-            laik_shmem_panic(err);
-        assert((int)ba->count == count);
-        break;
-    }
-    */
-    case LAIK_AT_ShmemCopyMapToReceiver:
-    {
-        assert(a->chain_idx == this ->chain_idx);
-        laik_shmem_exec_CopyMapToReceiver(a, tc, g);
-        break;
-    }
-    case LAIK_AT_ShmemReceiveMap:
-    {
-        assert(a->chain_idx == this ->chain_idx);
-        laik_shmem_exec_ReceiveMap(a, tc, g);
-        break;
-    }
-    default:
-        laik_log(LAIK_LL_Panic, "shmem_secondary_exec: no idea how to exec action %d (%s)",
-                     a->type, laik_at_str(a->type));
-        return false;
-    }
-    return true;
 }
 
-bool laik_shmem_log_action(const Laik_Secondary* this, Laik_ActionSeq* as, Laik_Action *a){
+bool laik_shmem_log_action(Laik_Inst_Data* idata, Laik_ActionSeq* as, Laik_Action *a){
+    
+    if(a->chain_idx > idata->index)
+    {
+        return laik_next_log(idata, as, a);
+    }
+    // action must be added by this backend
+    assert(idata->index == a->chain_idx);
+
     switch (a->type)
     {
     case LAIK_AT_ShmemMapSend:
@@ -848,7 +593,7 @@ bool laik_shmem_log_action(const Laik_Secondary* this, Laik_ActionSeq* as, Laik_
     {
         Laik_A_ShmemMapGroupReduce* aa = (Laik_A_ShmemMapGroupReduce*)a;
         laik_log_append("ShmemMapGroupReduce: ");
-        laik_log_TaskGroupAS(as, aa->subgroup, this->chain_idx);
+        laik_log_TaskGroupAS(as, aa->subgroup, a->chain_idx);
         laik_log_append("==> T%d", laik_aseq_taskInGroup(as, aa->subgroup, 0, a->chain_idx));
         break;
     }
@@ -865,5 +610,13 @@ bool laik_shmem_log_action(const Laik_Secondary* this, Laik_ActionSeq* as, Laik_
         return false;
     }
     return true;
+}
+
+Laik_Allocator* shmem_allocator()
+{
+    laik_log(1, "Allocator of shmem backend chosen for laik");
+    shmemAllocator = laik_new_allocator(def_shmem_malloc, def_shmem_free, 0);
+    shmemAllocator->policy = LAIK_MP_NewAllocOnRepartition;
+    return shmemAllocator;
 }
 //#endif

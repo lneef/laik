@@ -18,8 +18,10 @@
 #ifndef LAIK_ACTION_INTERNAL_H
 #define LAIK_ACTION_INTERNAL_H
 
+#include "action.h"
 #include "definitions.h"
 #include "laik.h"         // for Laik_Instance, Laik_Group
+#include "laik/core.h"
 
 // Action sequences are used in the public LAIK API as abstraction
 // for compound communication requests, e.g. consisting of multiple
@@ -229,12 +231,13 @@ struct _Laik_ActionSeq {
     int ceCount;
     int ceRanges;
 
+    //current state of the execution
+    unsigned int currentActionCount;
+    Laik_Action* currentAction;
+
     // subgroups for group reductions  
     int subgroupCount;
     TaskGroupAS* subgroups;
-
-    // secondary backend specific data necessary for executing the action sequence
-    void* secondary_data[MAX_SECONDARIES];
 
     // action sequence to trigger on execution
     unsigned int actionCount;
@@ -268,10 +271,10 @@ struct _TaskGroupAS
     //size of the memory segment
     int size;
     //number of ranks in each secondary specific part of the subgroup
-    int count[MAX_SECONDARIES + 1];
+    int count[MAX_BACKENDS];
 
     //offset of each secondary specific part of the subgroup
-    int offset[MAX_SECONDARIES + 1];
+    int offset[MAX_BACKENDS];
 
     //initial subroup - a list of ranks - which is split up among the backends
     //fragmentation into several sublist with backend specific ranks
@@ -328,6 +331,8 @@ int laik_aseq_addTContext(Laik_ActionSeq* as,
 
 // append action to stop execution (even if there are more in the sequence)
 void laik_aseq_addHalt(Laik_ActionSeq* as);
+
+void laik_aseq_addreturntoPrimary(Laik_ActionSeq* as, int round);
 
 // append action to do the transition specified by the transition context ID
 void laik_aseq_addTExec(Laik_ActionSeq* as, int tid);
@@ -550,6 +555,9 @@ int laik_aseq_calc_stats(Laik_ActionSeq* as);
 void laik_exec_pack(Laik_BackendAction* a, Laik_Mapping* map);
 // exec action LAIK_AT_UnpackFromBuf
 void laik_exec_unpack(Laik_BackendAction* a, Laik_Mapping* map);
+
+// add halt in case of several backends
+void laik_aseq_addBHalt(Laik_Inst_Data* idata, Laik_ActionSeq* as);
 
 
 #endif // LAIK_ACTION_INTERNAL_H

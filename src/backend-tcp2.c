@@ -152,10 +152,11 @@
  */
 
 
-#ifdef USE_TCP2
+//#ifdef USE_TCP2
 
 #include "laik-internal.h"
 #include "laik-backend-tcp2.h"
+#include "laik/core.h"
 
 #include <assert.h>
 #include <errno.h>
@@ -185,11 +186,11 @@
 #define RBUF_LEN 8*1024
 
 // forward decl
-void tcp2_exec(const Laik_Backend* this, Laik_ActionSeq* as);
-void tcp2_sync(const Laik_Backend* this, Laik_KVStore* kvs);
-Laik_Group* tcp2_resize(const Laik_Backend* this, Laik_ResizeRequests*);
-void tcp2_finish_resize(const Laik_Backend* this);
-void tcp2_make_progress(const Laik_Backend* this);
+void tcp2_exec(Laik_Inst_Data* idata, Laik_ActionSeq* as);
+void tcp2_sync(Laik_KVStore* kvs);
+Laik_Group* tcp2_resize(Laik_Inst_Data*, Laik_ResizeRequests*);
+void tcp2_finish_resize(Laik_Inst_Data*);
+void tcp2_make_progress(Laik_Inst_Data*);
 
 typedef struct _InstData InstData;
 
@@ -2090,7 +2091,7 @@ void send_data(int n, int dims, Laik_Index* idx, int toLID, void* p, int s)
             laik_log_flush("");
     }
 
-    send_cmd((InstData*)instance->backend_data, toLID, str);
+    send_cmd((InstData*)instance->inst_data, toLID, str);
 }
 
 // send
@@ -2111,7 +2112,7 @@ void send_data_bin_flush(int toLID)
     sbuf[0] = 'B';
     sbuf[1] = bytes & 255;
     sbuf[2] = bytes >> 8;
-    send_bin((InstData*)instance->backend_data, toLID, sbuf, sbuf_used);
+    send_bin((InstData*)instance->inst_data, toLID, sbuf, sbuf_used);
     sbuf_used = 3; // reserve space for header
     sbuf_toLID = -1;
 }
@@ -2151,7 +2152,7 @@ void send_range(Laik_Mapping* fromMap, Laik_Range* range, int toLID)
     int dims = range->space->dims;
     assert(fromMap->start != 0); // must be backed by memory
 
-    InstData* d = (InstData*)instance->backend_data;
+    InstData* d = (InstData*)instance->inst_data;
     Peer* p = &(d->peer[toLID]);
     if (p->scount == 0) {
         // we need to wait for right to send data
@@ -2190,7 +2191,7 @@ void recv_range(Laik_Range* range, int fromLID, Laik_Mapping* toMap, Laik_Reduct
 {
     assert(toMap->start != 0); // must be backed by memory
     // check no data still registered to be received from <fromID>
-    InstData* d = (InstData*)instance->backend_data;
+    InstData* d = (InstData*)instance->inst_data;
     Peer* p = &(d->peer[fromLID]);
     assert(p->rcount == 0);
 
@@ -2306,9 +2307,9 @@ void exec_reduce(Laik_TransitionContext* tc,
 }
 
 
-void tcp2_exec(const Laik_Backend* this, Laik_ActionSeq* as)
+void tcp2_exec(Laik_Inst_Data* idata, Laik_ActionSeq* as)
 {
-    (void)this;
+    (void)idata;
     if (as->actionCount == 0) {
         laik_log(1, "TCP2 exec: nothing to do\n");
         return;
@@ -2369,11 +2370,10 @@ void tcp2_exec(const Laik_Backend* this, Laik_ActionSeq* as)
     }
 }
 
-void tcp2_sync(const Laik_Backend* this, Laik_KVStore* kvs)
+void tcp2_sync(Laik_KVStore* kvs)
 {
-    (void)this;
     char msg[100];
-    InstData* d = (InstData*)instance->backend_data;
+    InstData* d = (InstData*)instance->inst_data->backend_data;
 
     int count = 0;
     for(unsigned int i = 0; i < kvs->used; i++) {
@@ -2455,11 +2455,10 @@ void tcp2_sync(const Laik_Backend* this, Laik_KVStore* kvs)
     d->kvs = 0;
 }
 
-void tcp2_make_progress(const Laik_Backend* this)
+void tcp2_make_progress(Laik_Inst_Data* idata)
 {
-    (void)this;
     // process incoming commands
-    InstData* d = (InstData*)instance->backend_data;
+    InstData* d = (InstData*)idata->backend_data;
     check_loop(d);
 
     // collect register requests into join list
@@ -2484,14 +2483,14 @@ void tcp2_make_progress(const Laik_Backend* this)
     }
 }
 
-void tcp2_finish_resize(const Laik_Backend* this)
+void tcp2_finish_resize(Laik_Inst_Data* idata)
 {
-    (void)this;
+    (void)idata;
     // a resize must have been started
     assert(instance->world && instance->world->parent);
 
     // peers marked for removal are now dead
-    InstData* d = (InstData*)instance->backend_data;
+    InstData* d = (InstData*)idata->backend_data;
     int markedDead = 0;
     for(int lid = 1; lid <= d->maxid; lid++)
         if (d->peer[lid].state == PS_ReadyRemove) {
@@ -2506,15 +2505,14 @@ void tcp2_finish_resize(const Laik_Backend* this)
 
 
 // return new group on process size change (global sync)
-Laik_Group* tcp2_resize(const Laik_Backend* this, Laik_ResizeRequests* resizeReqs)
+Laik_Group* tcp2_resize(Laik_Inst_Data* idata, Laik_ResizeRequests* resizeReqs)
 {
-    (void)this;
     char msg[150];
 
     // any previous resize must be finished
     assert(instance->world && (instance->world->parent == 0));
 
-    InstData* d = (InstData*)instance->backend_data;
+    InstData* d = (InstData*)idata->backend_data;
     if (d->mystate == PS_ReadyRemove) {
         // cannot join in resize, outside of current world
         return 0;
@@ -2801,4 +2799,4 @@ Laik_Group* tcp2_resize(const Laik_Backend* this, Laik_ResizeRequests* resizeReq
     return g;
 }
 
-#endif // USE_TCP2
+//#endif // USE_TCP2

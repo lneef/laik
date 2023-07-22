@@ -22,6 +22,7 @@
 
 #include "laik-internal.h"
 #include "laik/action.h"
+#include "laik/core.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -141,9 +142,9 @@ void laik_log_TaskGroupAS(Laik_ActionSeq* as, int group, int chain_idx)
     assert(group < as->subgroupCount);
     TaskGroupAS tg = as->subgroups[group];
 
-    int offset = tg.offset[chain_idx + 1];
+    int offset = tg.offset[chain_idx];
     laik_log_append("(");
-    for(int i = 0; i < tg.count[chain_idx + 1]; i++) {
+    for(int i = 0; i < tg.count[chain_idx]; i++) {
         if (i > 0) laik_log_append(",");
         laik_log_append("T%d", tg.tasks[offset + i]);
     }
@@ -457,7 +458,11 @@ void laik_log_Action(Laik_Action* a, Laik_ActionSeq* as)
     case LAIK_AT_Nop:
     case LAIK_AT_TExec:
         break;
-
+    case LAIK_AT_ReturnToPrimary:
+    {
+        laik_log_append("ReturnToPrimary");
+        break;
+    }
     case LAIK_AT_BufReserve: {
         Laik_A_BufReserve* aa = (Laik_A_BufReserve*) a;
         laik_log_append(": buf id %d, size %d", aa->bufID, aa->size);
@@ -612,9 +617,9 @@ void laik_log_Action(Laik_Action* a, Laik_ActionSeq* as)
                         ba->count,
                         (void*) ba->fromBuf, (void*) ba->toBuf);
         //parts of subgroups covered by sceondaries only relevant for GroupReduce
-        laik_log_TaskGroupAS(as, ba->inputGroup, -1);
+        laik_log_TaskGroupAS(as, ba->inputGroup, 0);
         laik_log_append(", output ");
-        laik_log_TaskGroupAS(as, ba->outputGroup, -1);
+        laik_log_TaskGroupAS(as, ba->outputGroup, 0);
         break;
 
     case LAIK_AT_RBufGroupReduce:
@@ -726,7 +731,7 @@ void laik_log_Action(Laik_Action* a, Laik_ActionSeq* as)
 
     default:
         if (as->backend && as->backend->log_action)
-            if ((*as->backend->log_action)(as->backend, as, a)) return;
+            if ((*as->backend->log_action)(as->inst->inst_data, as, a)) return;
 
         laik_log(LAIK_LL_Panic,
                  "laik_log_Action: unknown action %d", a->type);
@@ -745,7 +750,7 @@ void laik_log_ActionSeq(Laik_ActionSeq *as, bool showDetails)
                     as->bufferCount, 0.000001 * laik_aseq_bufsize(as),
                     as->actionCount, as->bytesUsed,
                     as->ceRanges, sizeof(Laik_CopyEntry) * as->ceRanges);
-                    
+    
     Laik_TransitionContext* tc = 0;
     for(int i = 0; i < as->contextCount; i++) {
         tc = as->context[i];
@@ -760,11 +765,9 @@ void laik_log_ActionSeq(Laik_ActionSeq *as, bool showDetails)
         laik_log_append("  buffer %d: len %d at %p\n",
                         i, as->bufSize[i], as->buf[i]);
     }
-
     Laik_Action* a = as->action;
     for(unsigned int i = 0; i < as->actionCount; i++, a = nextAction(a)) {
         laik_log_Action(a, as);
-        laik_log(2, "%d", i);
         laik_log_append("\n");
     }
     assert(as->bytesUsed == (size_t) (((char*)a) - ((char*)as->action)));

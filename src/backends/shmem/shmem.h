@@ -19,6 +19,7 @@
 #ifndef SHMEM_H
 #define SHMEM_H
 
+#include "laik/core.h"
 #include<laik-internal.h>
 #include<stddef.h>
 #include<laik.h>
@@ -72,12 +73,7 @@ typedef struct _Laik_Shmem_Comm
     int *primaryRanks;
 
     //chosen copy scheme
-    int (*send)(void*, int, int, int, struct _Laik_Shmem_Comm*);
-    
-    //send and recv for integers (implemented by primary)
-    int (*sendP)(int *, int, int, void*);
-    int (*recvP)(int *, int, int, void*);
-
+    int (*send)(void*, int, int, int);
 
 }Laik_Shmem_Comm;
 
@@ -88,8 +84,9 @@ typedef struct _Laik_Shmem_Comm
 
 int shmem_error_string(int error, char *str);
 
-int shmem_secondary_init(Laik_Shmem_Comm* sg, int primaryRank, int primarySize, int* locations, int** newLocations, int** ranks, 
-                            int (*send)(int *, int, int, void*), int (*recv)(int *, int, int, void*), void* backend_data);
+int shmem_secondary_init(Laik_Shmem_Comm* sg, Laik_Inst_Data* idata, Laik_Group* world, int primaryRank, int primarySize, int* locations, int** newLocations,
+                        int** ranks);
+
 int shmem_comm_size(Laik_Shmem_Comm* sg, int *sizePtr);
 
 int shmem_comm_rank(Laik_Shmem_Comm* sg, int *rankPtr);
@@ -107,19 +104,19 @@ int shmem_finalize();
 //------------------------------------------------------------------------------
 // peer to peer communication actions
 
-int shmem_send(void *buffer, int count, int datatype, int recipient, Laik_Shmem_Comm* sg, void* backend_data);
+int shmem_send(void *buffer, int count, int datatype, int recipient,  Laik_Inst_Data* idata, Laik_Group* g);
 
-int shmem_recv(void *buffer, int count, int datatype, int sender, int *recieved, Laik_Shmem_Comm* sg, void* backend_data);
+int shmem_recv(void *buffer, int count, int datatype, int sender, int *recieved,  Laik_Inst_Data* idata, Laik_Group* g);
 
-int shmem_sendMap(Laik_Mapping* map, int receiver, Laik_Shmem_Comm* sg, void* backend_data);
+int shmem_sendMap(Laik_Mapping* map, int receiver,  Laik_Inst_Data* idata, Laik_Group* g);
 
-int shmem_recvMap(Laik_Mapping* map, Laik_Range* range, int count, int sender, Laik_Shmem_Comm* sg, void* backend_data);
+int shmem_recvMap(Laik_Mapping* map, Laik_Range* range, int count, int sender,  Laik_Inst_Data* idata, Laik_Group* g);
 
-int shmem_PackSend(Laik_Mapping* map, Laik_Range range, int count, int receiver, Laik_Shmem_Comm* sg, void* backend_data);
+int shmem_PackSend(Laik_Mapping* map, Laik_Range range, int count, int receiver,  Laik_Inst_Data* idata, Laik_Group* g);
 
-int shmem_RecvUnpack(Laik_Mapping* map, Laik_Range* range, int count, int sender, Laik_Shmem_Comm* sg, void* backend_data);
+int shmem_RecvUnpack(Laik_Mapping* map, Laik_Range* range, int count, int sender, Laik_Inst_Data* idata, Laik_Group* g);
 
-int shmem_RecvReduce(char* buf, int count, int sender, Laik_Type* type, Laik_ReductionOperation redOp, Laik_Shmem_Comm* sg, void* backend_data);
+int shmem_RecvReduce(char* buf, int count, int sender, Laik_Type* type, Laik_ReductionOperation redOp,  Laik_Inst_Data* idata, Laik_Group* g);
 
 //------------------------------------------------------------------------------
 // copy buffer management and subgroup handling

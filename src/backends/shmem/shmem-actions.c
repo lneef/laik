@@ -1,5 +1,6 @@
 
 #include "shmem-actions.h"
+#include "laik/core.h"
 #include "shmem.h"
 
 #include <laik-internal.h>
@@ -118,12 +119,12 @@ void laik_shmem_addShmemCopyToBuf(Laik_ActionSeq* as, int round, char* buf, char
 }
 
 
-void laik_shmem_exec_GroupBroadCast(Laik_Action* a, Laik_ActionSeq* as, Laik_TransitionContext* tc, Laik_Group* g)
+void laik_shmem_exec_GroupBroadCast(Laik_Action* a, Laik_ActionSeq* as, Laik_TransitionContext* tc, Laik_Inst_Data* idata, Laik_Group* g)
 {
     Laik_A_ShmemGroupBroadCast* ba = (Laik_A_ShmemGroupBroadCast*) a;
     Laik_Data * data = tc -> data;
     int chain_idx = a -> chain_idx;
-    Laik_Shmem_Comm* sg = (Laik_Shmem_Comm*) g->sec_group[a->chain_idx];
+    Laik_Shmem_Comm* sg = (Laik_Shmem_Comm*) g->backend_data[a->chain_idx];
 
     if(sg->rank == ba->primary)
     {
@@ -133,21 +134,21 @@ void laik_shmem_exec_GroupBroadCast(Laik_Action* a, Laik_ActionSeq* as, Laik_Tra
         {
             int task = laik_aseq_taskInGroup(as, ba->subgroup, i, chain_idx);
 
-            shmem_send(ba->buf, ba->count, data->elemsize, task, sg, g->backend_data);
+            shmem_send(ba->buf, ba->count, data->elemsize, task,idata, g);
         }
     }
     else {
         int received;
-        shmem_recv(ba->buf, ba->count, data->elemsize, ba->primary, &received, sg, g->backend_data);
+        shmem_recv(ba->buf, ba->count, data->elemsize, ba->primary, &received, idata, g);
         laik_log(2, "%d", received);
     }
 }
 
-void laik_shmem_exec_GroupReduce(Laik_Action * a, Laik_ActionSeq* as, Laik_TransitionContext* tc, Laik_Group* g)
+void laik_shmem_exec_GroupReduce(Laik_Action * a, Laik_ActionSeq* as, Laik_TransitionContext* tc, Laik_Inst_Data* idata, Laik_Group* g)
 {
     Laik_A_ShmemGroupReduce* ba = (Laik_A_ShmemGroupReduce*) a;
     Laik_Data* data = tc -> data;
-    Laik_Shmem_Comm* sg = (Laik_Shmem_Comm*) g->sec_group[a->chain_idx];
+    Laik_Shmem_Comm* sg = (Laik_Shmem_Comm*) g->backend_data[a->chain_idx];
 
 
     int off = data->elemsize * ba -> count;
@@ -162,22 +163,22 @@ void laik_shmem_exec_GroupReduce(Laik_Action * a, Laik_ActionSeq* as, Laik_Trans
         {   
 
             int task = laik_aseq_taskInGroup(as, ba->subgroup, i, chain_idx);
-            shmem_recv(ba -> buf + off, ba->count, data->elemsize, task, &received, sg, g->backend_data); 
+            shmem_recv(ba -> buf + off, ba->count, data->elemsize, task, &received, idata, g); 
             data -> type -> reduce(ba->buf, ba->buf, ba->buf + off, ba->count, ba->redOp);
 
         }
     }
     else {
-        shmem_send(ba->fromBuf, ba->count, data->elemsize, ba->primary, sg, g->backend_data);
+        shmem_send(ba->fromBuf, ba->count, data->elemsize, ba->primary, idata, g);
     }
 }
 
 
-void laik_shmem_exec_Reduce(Laik_Action* a, Laik_TransitionContext* tc, Laik_Group* g)
+void laik_shmem_exec_Reduce(Laik_Action* a, Laik_TransitionContext* tc, Laik_Inst_Data* idata, Laik_Group* g)
 {
     Laik_A_ShmemReduce* ba = (Laik_A_ShmemReduce*) a;
     Laik_Data* data = tc -> data;
-    Laik_Shmem_Comm* sg = (Laik_Shmem_Comm*)g->sec_group[a->chain_idx];
+    Laik_Shmem_Comm* sg = (Laik_Shmem_Comm*)g->backend_data[a->chain_idx];
 
     memcpy(ba->buf, ba->frombuf, ba->count * data->elemsize);
 
@@ -187,17 +188,17 @@ void laik_shmem_exec_Reduce(Laik_Action* a, Laik_TransitionContext* tc, Laik_Gro
 
     for(int i = 1; i < size; ++i)
     {   
-        shmem_recv(ba->buf + off, ba->count, data->elemsize, i, &received, sg, g->backend_data); 
+        shmem_recv(ba->buf + off, ba->count, data->elemsize, i, &received, idata, g); 
         data -> type -> reduce(ba->buf, ba->buf, ba->buf + off, ba->count, ba->redOp);
     }
 
 }
 
-void laik_shmem_exec_CopyToBuf(Laik_Action* a, Laik_TransitionContext* tc, Laik_Group* g)
+void laik_shmem_exec_CopyToBuf(Laik_Action* a, Laik_TransitionContext* tc, Laik_Inst_Data* idata, Laik_Group* g)
 {
     Laik_A_ShmemCopyToBuf* ba = (Laik_A_ShmemCopyToBuf*) a;
     Laik_Data* data = tc -> data;
-    Laik_Shmem_Comm* sg = (Laik_Shmem_Comm*) g->sec_group[a->chain_idx];
+    Laik_Shmem_Comm* sg = (Laik_Shmem_Comm*) g->backend_data[a->chain_idx];
 
     int rank;
 
@@ -206,61 +207,59 @@ void laik_shmem_exec_CopyToBuf(Laik_Action* a, Laik_TransitionContext* tc, Laik_
     if(ba->sender == ba->receiver){
         memcpy(ba -> toBuf, ba -> fromBuf, data->elemsize * ba -> count);
     }else if (rank == ba->sender) {
-        shmem_send(ba->fromBuf, ba->count, data->elemsize, ba->receiver, sg, g->backend_data);
+        shmem_send(ba->fromBuf, ba->count, data->elemsize, ba->receiver, idata, g);
     }else if (rank == ba->receiver) {
         int received;
-        shmem_recv(ba->toBuf, ba->count, data->elemsize, ba->sender, &received, sg, g->backend_data);
+        shmem_recv(ba->toBuf, ba->count, data->elemsize, ba->sender, &received, idata, g);
     }
 }
 
-void laik_shmem_exec_Broadcast(Laik_Action* a, Laik_TransitionContext* tc, Laik_Group* g)
+void laik_shmem_exec_Broadcast(Laik_Action* a, Laik_TransitionContext* tc, Laik_Inst_Data* idata, Laik_Group* g)
 {
     Laik_A_ShmemBroadcast* ba = (Laik_A_ShmemBroadcast*) a;
     Laik_Data* data = tc -> data;
-    Laik_Shmem_Comm* sg = (Laik_Shmem_Comm*) g->sec_group[a->chain_idx];
+    Laik_Shmem_Comm* sg = (Laik_Shmem_Comm*) g->backend_data[a->chain_idx];
 
     int size;
     shmem_comm_size(sg, &size);
 
     for(int i = 1; i < size; ++i)
     {
-        shmem_send(ba->buf, ba->count, data->elemsize, i, sg, g->backend_data);
+        shmem_send(ba->buf, ba->count, data->elemsize, i, idata, g);
     }
 }
 
-void laik_shmem_exec_CopyMapToReceiver(Laik_Action* a, Laik_TransitionContext* tc, Laik_Group* g)
+void laik_shmem_exec_CopyMapToReceiver(Laik_Action* a, Laik_TransitionContext* tc, Laik_Inst_Data* idata, Laik_Group* g)
 {
     Laik_A_ShmemCopyMapToReceiver* aa = (Laik_A_ShmemCopyMapToReceiver*) a;
-    Laik_Shmem_Comm* sg = (Laik_Shmem_Comm*) g->sec_group[a->chain_idx];
 
     Laik_Mapping* map = &tc->fromList->map[aa->mapNo];
 
     if(!map->header)
     {
-        shmem_PackSend(map, *aa->range, aa->count, aa->to_rank, sg, g->backend_data);
+        shmem_PackSend(map, *aa->range, aa->count, aa->to_rank, idata, g);
     }
     else {
-        shmem_sendMap(map, aa->to_rank, sg, g->backend_data);
+        shmem_sendMap(map, aa->to_rank, idata, g);
     }
 }
 
-void laik_shmem_exec_ReceiveMap(Laik_Action* a, Laik_TransitionContext* tc, Laik_Group* g)
+void laik_shmem_exec_ReceiveMap(Laik_Action* a, Laik_TransitionContext* tc, Laik_Inst_Data* idata, Laik_Group* g)
 {
     Laik_A_ShmemReceiveMap* aa = (Laik_A_ShmemReceiveMap*) a;
-    Laik_Shmem_Comm* sg = (Laik_Shmem_Comm*) g->sec_group[a->chain_idx];
 
     Laik_Mapping* map = &tc->toList->map[aa->mapNo];
     
-    shmem_recvMap(map, aa->range, aa->count, aa->from_rank, sg, g->backend_data);
+    shmem_recvMap(map, aa->range, aa->count, aa->from_rank, idata, g);
 
     
 }
 
-void laik_shmem_exec_MapGroupReduce(Laik_ActionSeq* as, Laik_Action* a, Laik_TransitionContext* tc, Laik_Group* g)
+void laik_shmem_exec_MapGroupReduce(Laik_ActionSeq* as, Laik_Action* a, Laik_TransitionContext* tc, Laik_Inst_Data* idata, Laik_Group* g)
 {
     Laik_A_ShmemMapGroupReduce* aa = (Laik_A_ShmemMapGroupReduce*) a;
     int rank;
-    Laik_Shmem_Comm* sg = (Laik_Shmem_Comm*) g->sec_group[a->chain_idx];
+    Laik_Shmem_Comm* sg = (Laik_Shmem_Comm*) g->backend_data[a->chain_idx];
     shmem_comm_rank(sg, &rank);
     Laik_Mapping* map = &tc->fromList->map[aa->mapNo];
     Laik_Data* data = tc->data;
@@ -274,23 +273,22 @@ void laik_shmem_exec_MapGroupReduce(Laik_ActionSeq* as, Laik_Action* a, Laik_Tra
         for(int i = 1; i < count; ++i)
         {   
             int task = laik_aseq_taskInGroup(as, aa->subgroup, i, chain_idx);
-            laik_log(2, "%d", task);
-            shmem_RecvReduce(aa->buf, aa->count, task, data->type, aa->redOp, sg, g->backend_data);
+            shmem_RecvReduce(aa->buf, aa->count, task, data->type, aa->redOp, idata, g);
 
         }
     }
     else{
         int task = laik_aseq_taskInGroup(as, aa->subgroup, 0, chain_idx);
-        shmem_PackSend(map, *aa->range, aa->count, task, sg, g->backend_data);
+        shmem_PackSend(map, *aa->range, aa->count, task, idata, g);
     }
     
 }
 
-void laik_shmem_exec_MapBroadCast(Laik_ActionSeq* as , Laik_Action* a, Laik_TransitionContext* tc, Laik_Group* g)
+void laik_shmem_exec_MapBroadCast(Laik_ActionSeq* as , Laik_Action* a, Laik_TransitionContext* tc, Laik_Inst_Data* idata, Laik_Group* g)
 {
     Laik_A_ShmemMapBroadCast* aa = (Laik_A_ShmemMapBroadCast*) a;
     int rank;
-    Laik_Shmem_Comm* sg = (Laik_Shmem_Comm*) g->sec_group[a->chain_idx];
+    Laik_Shmem_Comm* sg = (Laik_Shmem_Comm*) g->backend_data[a->chain_idx];
     shmem_comm_rank(sg, &rank);
     int chain_idx = a->chain_idx;
     Laik_Data* data = tc->data;
@@ -304,13 +302,13 @@ void laik_shmem_exec_MapBroadCast(Laik_ActionSeq* as , Laik_Action* a, Laik_Tran
         for(int i = 1; i < count; ++i)
         {
             int task = laik_aseq_taskInGroup(as, aa->subgroup, i, chain_idx);
-            shmem_send(aa->buf, aa->count, data->elemsize, task, sg, g->backend_data);
+            shmem_send(aa->buf, aa->count, data->elemsize, task, idata, g);
         }
 
     }
     else {
         int task = laik_aseq_taskInGroup(as, aa->subgroup, 0, chain_idx);
-        shmem_RecvUnpack(map, aa->range, aa->count, task, sg, g->backend_data);
+        shmem_RecvUnpack(map, aa->range, aa->count, task, idata, g);
     }
 }
 

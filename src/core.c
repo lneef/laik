@@ -27,6 +27,7 @@
 #include <laik-backend-single.h>
 #include <laik-backend-tcp.h>
 #include <laik-backend-tcp2.h>
+#include <stddef.h>
 
 // for string.h to declare strdup
 #define __STDC_WANT_LIB_EXT2__ 1
@@ -132,8 +133,7 @@ Laik_Instance* laik_init(int* argc, char*** argv)
     return inst;
 }
 
-void laik_init_secondaries(Laik_Instance* inst, Laik_Group* world, int primaryRank, int primarySize, int (*send)(int *, int, int, void*),
-                         int (*recv)(int *, int, int, void*))
+void laik_init_secondaries(Laik_Instance* inst, Laik_Group* world, int primaryRank, int primarySize)
 {
     char* sec = getenv("LAIK_SECONDARIES");
 
@@ -150,7 +150,7 @@ void laik_init_secondaries(Laik_Instance* inst, Laik_Group* world, int primaryRa
     for(;name!=NULL;)
     {           
         if(!strcmp(name,"SHMEM" ))
-            laik_shmem_secondary_init(inst, world, primaryRank, primarySize, loc, &newLoc, &ranks, send, recv, world->backend_data);
+            laik_shmem_secondary_init(inst, world, primaryRank, primarySize, loc, &newLoc, &ranks);
 
         loc = newLoc;
         name = strtok_r(NULL, ",", &saveptr);
@@ -187,7 +187,7 @@ void laik_finalize(Laik_Instance* inst)
     laik_finish_world_resize(inst);
 
     if (inst->backend && inst->backend->finalize)
-        (*inst->backend->finalize)(inst->backend, inst);
+        (*inst->backend->finalize)(inst->inst_data, inst);
 
     if (inst->repart_ctrl){
         laik_ext_cleanup(inst);
@@ -216,6 +216,7 @@ void laik_finalize(Laik_Instance* inst)
     laik_free_profiling(inst);
     free(inst->control);
     laik_layout_store_cleanup(inst);
+    laik_log(2, "%u", getpid());
 
     laik_log_cleanup(inst);
 }
@@ -245,7 +246,8 @@ Laik_Instance* laik_new_instance(Laik_Backend* b,
     }
 
     instance->backend = b;
-    instance->backend_data = data;
+    instance->num_backends = 1;
+    instance->inst_data = laik_new_inst_data(data, 0);
     instance->epoch = epoch;
     instance->phase = phase;
     instance->locations = size;    // initial number of locations
@@ -339,10 +341,9 @@ Laik_Group* laik_create_group(Laik_Instance* i, int maxsize)
     g->gid = i->group_count;
     g->size = 0; // yet invalid
     g->maxsize = maxsize;
-    g->backend_data = 0;
     g->parent = 0;
     g->parent2 = 0;
-    memset(g->sec_group, 0, MAX_SECONDARIES * sizeof(void*));
+    memset(g->backend_data, 0, sizeof(void*) * MAX_BACKENDS);
 
     // space after struct
     g->locationid  = (int*) (((char*)g) + sizeof(Laik_Group));
@@ -357,6 +358,27 @@ Laik_Group* laik_create_group(Laik_Instance* i, int maxsize)
 
     i->group_count++;
     return g;
+}
+
+Laik_Inst_Data* laik_new_inst_data(void* my_data, int index){
+    Laik_Inst_Data* new = malloc(sizeof(Laik_Inst_Data));
+    new->next_backend = NULL;
+    new->next = new->prev = NULL;
+    new->backend_data = my_data;
+    new->index = index;
+    return new;
+}
+
+Laik_Inst_Data* laik_add_inst_data(Laik_Instance* inst, void* my_data, Laik_Backend* backend)
+{
+    Laik_Inst_Data* c = inst->inst_data;
+    for(; c->next != NULL; c = c->next);
+    Laik_Inst_Data* inst_data = laik_new_inst_data(my_data, c->index + 1);
+    c->next_backend = backend;
+    c->next = inst_data;
+    inst_data -> prev = c;
+
+    return inst_data;
 }
 
 Laik_Instance* laik_inst(Laik_Group* g)
@@ -547,7 +569,7 @@ Laik_Group* laik_new_shrinked_group(Laik_Group* g, int len, int* list)
     g2->myid = (g->myid < 0) ? -1 : g2->fromParent[g->myid];
     if (g->inst->backend->updateGroup)
     {
-        (g->inst->backend->updateGroup)(g->inst->backend, g2);
+        (g->inst->backend->updateGroup)(g->inst->inst_data, g2);
     }
 
     if (laik_log_begin(1)) {
@@ -582,7 +604,7 @@ Laik_Group* laik_allow_world_resize(Laik_Instance* instance, int phase)
     // phase, so ask backend to progress (if it provides such a function).
     // this may result in queuing incoming join/remove requests
     if (instance->backend->make_progress) {
-        (instance->backend->make_progress)(instance->backend);
+        (instance->backend->make_progress)(instance->inst_data);
     }
 
     // for now, we handle all resize requests directly
@@ -602,7 +624,7 @@ Laik_Group* laik_allow_world_resize(Laik_Instance* instance, int phase)
                        jcount, rcount);
     }
 
-    Laik_Group* g = (instance->backend->resize)(instance->backend, reqs);
+    Laik_Group* g = (instance->backend->resize)(instance->inst_data, reqs);
     if (reqs)
         reqs->used = 0;
 
@@ -620,7 +642,7 @@ void laik_finish_world_resize(Laik_Instance* instance)
     if (parent == 0) return;
 
     if (instance->backend->finish_resize) {
-        (instance->backend->finish_resize)(instance->backend);
+        (instance->backend->finish_resize)(instance->inst_data);
     }
 
     laik_release_group(parent);
