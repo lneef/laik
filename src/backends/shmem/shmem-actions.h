@@ -24,28 +24,13 @@
 
 // this file contains shared memory specific actions
 
-
-#define LAIK_AT_ShmemReduce (LAIK_AT_Backend + 40)
-#define LAIK_AT_ShmemBroadcast (LAIK_AT_Backend + 41)
-#define LAIK_AT_ShmemGroupReduce (LAIK_AT_Backend + 42)
-#define LAIK_AT_ShmemGroupBroadcast (LAIK_AT_Backend + 43)
-#define LAIK_AT_ShmemCopyToBuf (LAIK_AT_Backend + 44)
-#define LAIK_AT_ShmemCopyMapToReceiver (LAIK_AT_Backend + 45)
-#define LAIK_AT_ShmemReceiveMap (LAIK_AT_Backend + 46)
-#define LAIK_AT_ShmemMapGroupReduce (LAIK_AT_Backend + 47)
-#define LAIK_AT_ShmemMapBroadcast (LAIK_AT_Backend + 48)
-
-#define LAIK_AT_ShmemMapSend (LAIK_AT_Backend + 50)
-#define LAIK_AT_ShmemBufSend (LAIK_AT_Backend + 51)
-#define LAIK_AT_ShmemMapRecv (LAIK_AT_Backend + 52)
-#define LAIK_AT_ShmemRBufRecv (LAIK_AT_Backend + 53)
-#define LAIK_AT_ShmemBufRecv (LAIK_AT_Backend + 54)
-
-#define LAIK_AT_ShmemMapPackAndSend (LAIK_AT_Backend + 55)
-#define LAIK_AT_ShmemPackAndSend (LAIK_AT_Backend + 56)
-#define LAIK_AT_ShmemMapRecvAndUnpack (LAIK_AT_Backend + 57)
-#define LAIK_AT_ShmemRecvAndUnpack (LAIK_AT_Backend + 58)
-#define LAIK_AT_ShmemRBufSend (LAIK_AT_Backend + 59)
+#define LAIK_AT_ShmemGroupReduce (LAIK_AT_Backend + 41)
+#define LAIK_AT_ShmemGroupBroadcast (LAIK_AT_Backend + 42)
+#define LAIK_AT_ShmemCopyToBuf (LAIK_AT_Backend + 43)
+#define LAIK_AT_ShmemCopyMapToReceiver (LAIK_AT_Backend + 44)
+#define LAIK_AT_ShmemReceiveMap (LAIK_AT_Backend + 45)
+#define LAIK_AT_ShmemMapGroupReduce (LAIK_AT_Backend + 46)
+#define LAIK_AT_ShmemMapBroadcast (LAIK_AT_Backend + 47)
 
 #pragma pack(push, 1)
 typedef struct{

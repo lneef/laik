@@ -38,6 +38,8 @@ typedef struct _Laik_Group Laik_Group;
 
 typedef struct _Laik_Inst_Data Laik_Inst_Data;
 
+typedef struct _Laik_Group_Data Laik_Group_Data;
+
 // forward decl (for laik_log_set_time)
 struct timeval;
 

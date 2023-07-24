@@ -53,7 +53,7 @@ static void laik_tcp_finalize(Laik_Inst_Data*, Laik_Instance*);
 static void laik_tcp_prepare(Laik_Inst_Data*, Laik_ActionSeq*);
 static void laik_tcp_cleanup(Laik_Inst_Data*, Laik_ActionSeq*);
 static void laik_tcp_exec(Laik_Inst_Data*, Laik_ActionSeq* as);
-static void laik_tcp_updateGroup(Laik_Inst_Data*, Laik_Group*);
+static void laik_tcp_updateGroup(Laik_Inst_Data*, Laik_Group*, int, int);
 static void laik_tcp_sync(Laik_KVStore* kvs);
 
 // C guarantees that unset function pointers are NULL
@@ -222,9 +222,11 @@ void laik_tcp_finalize(Laik_Inst_Data* idata, Laik_Instance* inst)
 
 // update backend specific data for group if needed
 static
-void laik_tcp_updateGroup(Laik_Inst_Data* idata, Laik_Group* g)
+void laik_tcp_updateGroup(Laik_Inst_Data* idata, Laik_Group* g, int rank, int size)
 {
     (void)idata;
+    (void)rank;
+    (void)size;
     // calculate MPI communicator for group <g>
     // TODO: only supports shrinking of parent for now
     assert(g->parent);

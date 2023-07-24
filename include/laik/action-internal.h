@@ -297,6 +297,8 @@ int laik_aseq_groupCount(Laik_ActionSeq* as, int subgroup, int chain_idx);
 
 void laik_aseq_removefromAS(Laik_ActionSeq* as);
 
+bool laik_aseq_finishRed(Laik_ActionSeq* as, int inputGroup, int outputGroup, int chain_idx);
+
 // helpers for building new action sequences. New actions are first
 // stored in temporary space, and only becoming active when calling
 // laik_aseq_activateNewActions(). During build, there may already exist

@@ -2646,15 +2646,10 @@ int laik_aseq_taskInGroup(Laik_ActionSeq *as, int subgroup, int i, int chain_idx
 void laik_aseq_addSecondaryGroup(Laik_ActionSeq* as, int subgroup, int* ranks, int rankNum, int chain_idx)
 {
     TaskGroupAS* tg = &as -> subgroups[subgroup];
-    int left = tg->size - rankNum;    
+    int offset = tg->offset[chain_idx] = chain_idx == 0 ? 0 : tg->offset[chain_idx - 1] + tg->count[chain_idx - 1];
 
-    assert(left >= 0);
-
-    tg->size = left;
-    tg->offset[chain_idx] = left;
-
-    if(rankNum > 0) memcpy(&tg->tasks[left], ranks, rankNum * sizeof(int));
-
+    assert(offset + rankNum < tg->size);
+    if(rankNum > 0) memcpy(&tg->tasks[offset], ranks, rankNum * sizeof(int));
     tg -> count[chain_idx] = rankNum;
 }
 
@@ -2690,6 +2685,14 @@ void laik_aseq_updateGroupCount(Laik_ActionSeq* as, int subgroup, int count, int
 int laik_aseq_groupCount(Laik_ActionSeq* as, int subgroup, int chain_idx)
 {
     return as -> subgroups[subgroup].count[chain_idx];
+}
+
+bool laik_aseq_finishRed(Laik_ActionSeq* as, int inputGroup, int outputGroup, int chain_idx)
+{
+    TaskGroupAS* tg_i = &as->subgroups[inputGroup];
+    TaskGroupAS* tg_o = &as->subgroups[outputGroup];
+
+    return tg_i->offset[chain_idx] == chain_idx && tg_o->offset[chain_idx] == chain_idx && tg_i->count[chain_idx] > 0 && tg_o->count[chain_idx] > 0;
 }
 
 void laik_aseq_removefromAS(Laik_ActionSeq* as)

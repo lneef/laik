@@ -2485,7 +2485,6 @@ void tcp2_make_progress(Laik_Inst_Data* idata)
 
 void tcp2_finish_resize(Laik_Inst_Data* idata)
 {
-    (void)idata;
     // a resize must have been started
     assert(instance->world && instance->world->parent);
 

@@ -51,9 +51,6 @@ struct commHeader{
 #pragma pack(push, 1)
 typedef struct _Laik_Shmem_Comm
 {
-    // my rank
-    int rank;
-
     // size of the partition I am part of
     int size;
 
@@ -62,9 +59,6 @@ typedef struct _Laik_Shmem_Comm
 
     // divsion of the world group
     int* divsion;
-
-     // mapping of primary to secondary ranks
-    int* secondaryRanks;
 
     // number of shared memory islands
     int numIslands;
@@ -77,6 +71,12 @@ typedef struct _Laik_Shmem_Comm
 
 }Laik_Shmem_Comm;
 
+typedef struct _Laik_Shmem_Data
+{
+    int ranksPerIslands;
+    
+}Laik_Shmem_Data;
+
 #pragma pack(pop)
 
 //------------------------------------------------------------------------------
@@ -84,20 +84,15 @@ typedef struct _Laik_Shmem_Comm
 
 int shmem_error_string(int error, char *str);
 
-int shmem_secondary_init(Laik_Shmem_Comm* sg, Laik_Inst_Data* idata, Laik_Group* world, int primaryRank, int primarySize, int* locations, int** newLocations,
-                        int** ranks);
+int shmem_secondary_init(Laik_Shmem_Comm* sg, Laik_Inst_Data* idata, Laik_Group* world, int primaryRank, int primarySize, int* ranks, int** new_ranks);
 
 int shmem_comm_size(Laik_Shmem_Comm* sg, int *sizePtr);
-
-int shmem_comm_rank(Laik_Shmem_Comm* sg, int *rankPtr);
 
 int shmem_comm_colour(Laik_Shmem_Comm* sg, int *colourPtr);
 
 int shmem_get_colours(Laik_Shmem_Comm* sg, int **buf);
 
 int shmem_get_numIslands(Laik_Shmem_Comm* sg, int *num);
-
-int shmem_get_secondaryRanks(Laik_Shmem_Comm* sg, int **buf);
 
 int shmem_finalize();
 
@@ -106,7 +101,7 @@ int shmem_finalize();
 
 int shmem_send(void *buffer, int count, int datatype, int recipient,  Laik_Inst_Data* idata, Laik_Group* g);
 
-int shmem_recv(void *buffer, int count, int datatype, int sender, int *recieved,  Laik_Inst_Data* idata, Laik_Group* g);
+int shmem_recv(void *buffer, int count,int sender, Laik_Data* data, Laik_Inst_Data* idata, Laik_Group* g, Laik_ReductionOperation redOp);
 
 int shmem_sendMap(Laik_Mapping* map, int receiver,  Laik_Inst_Data* idata, Laik_Group* g);
 
@@ -125,7 +120,9 @@ void cleanupBuffer();
 
 void createBuffer(size_t size);
 
-bool onSameIsland(Laik_ActionSeq* as, Laik_Shmem_Comm* sg, int inputgroup, int outputgroup);
+int shmem_init_comm(Laik_Shmem_Comm *sg, Laik_Group *g, Laik_Inst_Data *idata, int* ranks, int** new_ranks, int size);
+
+bool onSameIsland(Laik_ActionSeq* as, Laik_Shmem_Comm* sg, int inputgroup, int outputgroup, int chain_idx);
 
 void shmem_transformSubGroup(Laik_ActionSeq* as, Laik_Shmem_Comm* sg, int chain_idx);
 

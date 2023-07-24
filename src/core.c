@@ -142,17 +142,17 @@ void laik_init_secondaries(Laik_Instance* inst, Laik_Group* world, int primaryRa
     char* name, *saveptr;
     name = strtok_r(sec, ",", &saveptr);
     
-
-    int *loc = NULL;
-    int *newLoc;
-    int* ranks = inst->world->locationid;
+    int size = primarySize;
+    int rank = primaryRank;
+    int* newLocs;
+    int* locs = world->locationid;
     
     for(;name!=NULL;)
     {           
         if(!strcmp(name,"SHMEM" ))
-            laik_shmem_secondary_init(inst, world, primaryRank, primarySize, loc, &newLoc, &ranks);
+            laik_shmem_secondary_init(inst, world, &rank, &size, locs, &newLocs);
 
-        loc = newLoc;
+        locs = newLocs;
         name = strtok_r(NULL, ",", &saveptr);
     }
 }
@@ -569,7 +569,7 @@ Laik_Group* laik_new_shrinked_group(Laik_Group* g, int len, int* list)
     g2->myid = (g->myid < 0) ? -1 : g2->fromParent[g->myid];
     if (g->inst->backend->updateGroup)
     {
-        (g->inst->backend->updateGroup)(g->inst->inst_data, g2);
+        (g->inst->backend->updateGroup)(g->inst->inst_data, g2, g2->locationid, o);
     }
 
     if (laik_log_begin(1)) {

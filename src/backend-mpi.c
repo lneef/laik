@@ -40,7 +40,7 @@ static void laik_mpi_finalize(Laik_Inst_Data*, Laik_Instance*);
 static void laik_mpi_prepare(Laik_Inst_Data*, Laik_ActionSeq*);
 static void laik_mpi_cleanup(Laik_Inst_Data*, Laik_ActionSeq*);
 static void laik_mpi_exec(Laik_Inst_Data*, Laik_ActionSeq* as);
-static void laik_mpi_updateGroup(Laik_Inst_Data*, Laik_Group*);
+static void laik_mpi_updateGroup(Laik_Inst_Data*, Laik_Group*, int* rank, int size);
 static bool laik_mpi_log_action(Laik_Inst_Data*, Laik_ActionSeq* as, Laik_Action* a);
 static void laik_mpi_sync(Laik_KVStore* kvs);
 
@@ -450,7 +450,8 @@ void laik_mpi_finalize(Laik_Inst_Data* idata, Laik_Instance* inst)
 
 // update backend specific data for group if needed
 static
-void laik_mpi_updateGroup(Laik_Inst_Data* idata, Laik_Group* g)
+void 
+laik_mpi_updateGroup(Laik_Inst_Data* idata, Laik_Group* g, int* ranks, int size)
 {
     // calculate MPI communicator for group <g>
     // TODO: only supports shrinking of parent for now
@@ -467,24 +468,25 @@ void laik_mpi_updateGroup(Laik_Inst_Data* idata, Laik_Group* g)
 
     MPIGroupData *gdParent = (MPIGroupData *)g->parent->backend_data[idata->index];
     assert(gdParent);
-    
+
     MPIGroupData *gd = (MPIGroupData *)g->backend_data[idata->index];
     assert(gd == 0); // must not be updated yet
     gd = malloc(sizeof(MPIGroupData));
+    
     if (!gd)
     {
         laik_panic("Out of memory allocating MPIGroupData object");
         exit(1); // not actually needed, laik_panic never returns
     }
-    g->backend_data[idata->index] = gd;
+    
     laik_log(1, "MPI Comm_split: old myid %d => new myid %d",
              g->parent->myid, g->fromParent[g->parent->myid]);
     int err = MPI_Comm_split(gdParent->comm, g->myid < 0 ? MPI_UNDEFINED : 0,
                              g->myid, &(gd->comm));
     if (err != MPI_SUCCESS)
         laik_mpi_panic(err);
-
-    laik_next_updateGroup(idata, g);
+    g->backend_data[idata->index] = gd;
+    laik_next_updateGroup(idata, g, ranks, size);
 }
 
 static MPI_Datatype getMPIDataType(Laik_Data *d)
@@ -1190,7 +1192,7 @@ void laik_mpi_prepare(Laik_Inst_Data* idata, Laik_ActionSeq* as)
     laik_log_ActionSeqIfChanged(changed, as, "After sorting for deadlock avoidance");
 
     
-    if (mpi_async)
+    if (false)
     {
         changed = laik_mpi_asyncSendRecv(as);
         laik_log_ActionSeqIfChanged(changed, as, "After makeing send/recv async");
