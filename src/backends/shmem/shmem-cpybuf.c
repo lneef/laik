@@ -17,6 +17,7 @@
 #include "shmem-cpybuf.h"
 #include "laik/core.h"
 #include "shmem-allocator.h"
+#include <assert.h>
 
 #include <stdlib.h>
 
@@ -25,6 +26,7 @@ struct cpyBuf* shmem_cpybuf_obtain()
     struct cpyBuf* buffer = malloc(sizeof(struct cpyBuf));
     buffer -> ptr = NULL;
     buffer -> size = 0;
+    buffer -> request = 0;
 
     return buffer;
 }
@@ -42,6 +44,7 @@ void shmem_cpybuf_alloc(struct cpyBuf* buf, size_t size){
         int shmid;
         buf -> ptr = shmem_alloc(size, &shmid);
         buf -> size = size;
+        assert(shmid> 0);
         buf -> shmid = shmid;
     }
 }
@@ -50,4 +53,10 @@ void shmem_cpybuf_delete(struct cpyBuf* buf){
     shmem_free(buf->ptr);
     buf->ptr = NULL;
     buf->size = 0;
+    buf->request = 0;
+}
+
+void shmem_cpybuf_request(struct cpyBuf* buf, size_t size)
+{
+    buf->request = size > buf->request ? size : buf->request;
 }

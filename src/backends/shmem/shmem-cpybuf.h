@@ -20,6 +20,7 @@
 struct cpyBuf{
     void* ptr;
     int shmid;
+    size_t request;
     size_t size;
 };
 
@@ -28,5 +29,7 @@ struct cpyBuf* shmem_cpybuf_obtain();
 void shmem_cpybuf_alloc(struct cpyBuf*, size_t size);
 
 void shmem_cpybuf_delete(struct cpyBuf*);
+
+void shmem_cpybuf_request(struct cpyBuf*, size_t size);
 
 #endif

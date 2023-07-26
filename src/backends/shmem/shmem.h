@@ -66,14 +66,18 @@ typedef struct _Laik_Shmem_Comm
     // rank numbers of the processes in this subgroup
     int *primaryRanks;
 
-    //chosen copy scheme
-    int (*send)(void*, int, int, int);
-
 }Laik_Shmem_Comm;
 
 typedef struct _Laik_Shmem_Data
 {
+    // number of processes per shared memory island
     int ranksPerIslands;
+
+    int copyScheme;
+
+    //chosen copy scheme
+    int (*send)(void*, int, int, int);
+
     
 }Laik_Shmem_Data;
 
@@ -84,7 +88,7 @@ typedef struct _Laik_Shmem_Data
 
 int shmem_error_string(int error, char *str);
 
-int shmem_secondary_init(Laik_Shmem_Comm* sg, Laik_Inst_Data* idata, Laik_Group* world, int primaryRank, int primarySize, int* ranks, int** new_ranks);
+int shmem_secondary_init(Laik_Shmem_Comm* sg, Laik_Inst_Data* idata, Laik_Group* world, int primarySize, int* ranks, int** new_ranks);
 
 int shmem_comm_size(Laik_Shmem_Comm* sg, int *sizePtr);
 
@@ -103,7 +107,7 @@ int shmem_send(void *buffer, int count, int datatype, int recipient,  Laik_Inst_
 
 int shmem_recv(void *buffer, int count,int sender, Laik_Data* data, Laik_Inst_Data* idata, Laik_Group* g, Laik_ReductionOperation redOp);
 
-int shmem_sendMap(Laik_Mapping* map, int receiver,  Laik_Inst_Data* idata, Laik_Group* g);
+int shmem_sendMap(Laik_Mapping* map, int receiver, int shmid, Laik_Inst_Data* idata, Laik_Group* g);
 
 int shmem_recvMap(Laik_Mapping* map, Laik_Range* range, int count, int sender,  Laik_Inst_Data* idata, Laik_Group* g);
 
@@ -118,7 +122,9 @@ int shmem_RecvReduce(char* buf, int count, int sender, Laik_Type* type, Laik_Red
 
 void cleanupBuffer();
 
-void createBuffer(size_t size);
+void createBuffer();
+
+void request_CpyBuf(size_t size);
 
 int shmem_init_comm(Laik_Shmem_Comm *sg, Laik_Group *g, Laik_Inst_Data *idata, int* ranks, int** new_ranks, int size);
 

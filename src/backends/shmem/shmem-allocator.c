@@ -34,7 +34,6 @@ static int get_shmid_and_destroy(void *ptr, int *shmid)
 
     struct shmSeg *previous = NULL;
     struct shmSeg *current = &shmList;
-
     while(current->next != NULL)
     {
         previous = current -> next;
@@ -66,11 +65,12 @@ void deleteAllocatedSegments(){
 
 void shmem_free(void* ptr)
 {
+    void* start = ((char*) ptr) - PAD(HEADER_SIZE, HEADER_PAD);
     int shmid;
-    if(get_shmid_and_destroy(ptr, &shmid) != SHMEM_SUCCESS)
+    if(get_shmid_and_destroy(start, &shmid) != SHMEM_SUCCESS)
         laik_panic("def_shmem_free couldn't find the given shared memory segment");
-
-    if (shmdt(ptr) == -1)
+    
+    if (shmdt(start) == -1)
         laik_panic("def_shmem_free couldn't detach from the given pointer");
 
     if (shmctl(shmid, IPC_RMID, 0) == -1)
@@ -94,8 +94,9 @@ int get_shmid(void *ptr, int *shmid, int *offset)
 
 void* shmem_alloc(size_t size, int* shimdPtr)
 {
-
-    int shmid = shmget(IPC_PRIVATE, size, 0644 | IPC_CREAT | IPC_EXCL);
+    size_t header_size = PAD(HEADER_SIZE, HEADER_PAD);
+    size_t alloc_size = size + header_size;
+    int shmid = shmget(IPC_PRIVATE, alloc_size, 0644 | IPC_CREAT | IPC_EXCL);
     if (shmid == -1)
     {   
         laik_panic("def_shmem_malloc couldn't create the shared memory segment: shmid == -1");
@@ -103,7 +104,7 @@ void* shmem_alloc(size_t size, int* shimdPtr)
     }
     
     // Attach to the segment to get a pointer to it.
-    void *ptr = shmat(shmid, NULL, 0);
+    struct shmHeader *ptr = shmat(shmid, NULL, 0);
     if (ptr == (void *)-1)
     {
         laik_panic("def_shmem_malloc couldn't attach to the shared memory segment");
@@ -112,13 +113,16 @@ void* shmem_alloc(size_t size, int* shimdPtr)
 
     struct shmSeg* seg = malloc(sizeof(struct shmSeg));
     seg -> ptr = ptr;
-    seg -> size = size;
+    seg -> size = alloc_size;
     seg -> shmid = shmid;
     register_shmSeg(seg);
 
     *shimdPtr = shmid;
 
-    return ptr;
+    ptr -> shmid = shmid;
+    ptr -> size = alloc_size;
+
+    return ((char*)ptr) + header_size;
 }
 
 

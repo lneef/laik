@@ -486,6 +486,7 @@ laik_mpi_updateGroup(Laik_Inst_Data* idata, Laik_Group* g, int* ranks, int size)
     if (err != MPI_SUCCESS)
         laik_mpi_panic(err);
     g->backend_data[idata->index] = gd;
+
     laik_next_updateGroup(idata, g, ranks, size);
 }
 

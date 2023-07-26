@@ -16,7 +16,9 @@
  */
 
 #include "laik-internal.h"
+#include "laik/core.h"
 #include "laik/data.h"
+#include "laik/debug.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -49,7 +51,7 @@ bool next_lex(Laik_Range* range, Laik_Index* idx)
     idx->i[2]++;
     idx->i[1] = range->from.i[1];
     if (idx->i[2] < range->to.i[2]) return true;
-    return false;
+    return false;   
 }
 
 // generic copy just using offset function from layout interface
@@ -66,7 +68,7 @@ void laik_layout_copy_gen(Laik_Range* range,
         laik_log_Range(range);
         laik_log_append(" (count %llu, elemsize %d) from mapping %p",
             laik_range_size(range), elemsize, from->start);
-        laik_log_append(" (data '%s'/%d, %s) ",
+        laik_log_append(" (data '%s'/, %s) ",
             from->data->name, from->mapNo,
             from->layout->describe(from->layout));
         laik_log_flush("to mapping %p (data '%s'/%d, layout %s): ",
@@ -123,6 +125,7 @@ unsigned int laik_layout_pack_gen(Laik_Mapping* m, Laik_Range* range,
         laik_log_Index(dims, idx);
         laik_log_flush(" into buf (size %d)", size);
     }
+
 
     unsigned int count = 0;
     while(size >= elemsize) {
@@ -239,8 +242,7 @@ void laik_init_layout(Laik_Layout* l, int dims, int map_count, uint64_t count,
                       laik_layout_pack_t pack,
                       laik_layout_unpack_t unpack,
                       laik_layout_copy_t copy,
-                      laik_layout_init_t alloc,
-                      laik_layout_free_t free)
+                      laik_layout_init_t alloc)
 {
     l->dims = dims;
     l->map_count = map_count;
@@ -275,7 +277,6 @@ void laik_init_layout(Laik_Layout* l, int dims, int map_count, uint64_t count,
     l->describe = describe;
     l->copy = copy;
     l->init = alloc;
-    l->free = free;
 }
 
 

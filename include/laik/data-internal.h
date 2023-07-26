@@ -144,7 +144,7 @@ struct _Laik_Mapping {
     Laik_Range requiredRange; // sub-range (global) containing used ranges
     uint64_t count, allocCount; // number of elements in req/allocRange
 
-    char* header; // memory header
+    char* header; // layout header
     char* start; // start address of mapping
     char* base; // address matching requiredRange.from (usually same as start)
     uint64_t capacity; // number of bytes allocated

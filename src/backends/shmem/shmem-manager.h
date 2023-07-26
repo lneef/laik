@@ -24,6 +24,16 @@ void* shmem_manager_alloc(size_t size);
 
 void shmem_manager_cleanup();
 
+Laik_Allocator* shmem_allocator();
+
+void* shmem_manager_attach(int shmid, int flag);
+
+void shmem_manager_detach(void* ptr);
+
+bool is_shmem_allocator(Laik_Allocator* allocator);
+
+int shmem_manager_shmid(char* ptr);
+
 void* def_shmem_malloc(Laik_Data* d, size_t size);
 
 void def_shmem_free(Laik_Data* d, void* ptr);

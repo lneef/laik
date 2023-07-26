@@ -19,18 +19,21 @@
 #define SHMEM_ACTIONS_H
 #include "backends/shmem/shmem.h"
 #include "laik/core.h"
+#include "laik/data.h"
 #include <laik.h>
 #include <laik-internal.h>
 
 // this file contains shared memory specific actions
 
-#define LAIK_AT_ShmemGroupReduce (LAIK_AT_Backend + 41)
-#define LAIK_AT_ShmemGroupBroadcast (LAIK_AT_Backend + 42)
-#define LAIK_AT_ShmemCopyToBuf (LAIK_AT_Backend + 43)
-#define LAIK_AT_ShmemCopyMapToReceiver (LAIK_AT_Backend + 44)
-#define LAIK_AT_ShmemReceiveMap (LAIK_AT_Backend + 45)
-#define LAIK_AT_ShmemMapGroupReduce (LAIK_AT_Backend + 46)
-#define LAIK_AT_ShmemMapBroadcast (LAIK_AT_Backend + 47)
+#define LAIK_AT_ShmemGetMapAndCopy (LAIK_AT_Backend + 40)
+#define LAIK_AT_ShmemTwoCopyMap (LAIK_AT_Backend + 41)
+#define LAIK_AT_ShmemGroupReduce (LAIK_AT_Backend + 42)
+#define LAIK_AT_ShmemGroupBroadcast (LAIK_AT_Backend + 43)
+#define LAIK_AT_ShmemCopyToBuf (LAIK_AT_Backend + 44)
+#define LAIK_AT_ShmemOneCopyMap (LAIK_AT_Backend + 45)
+#define LAIK_AT_ShmemReceiveMap (LAIK_AT_Backend + 46)
+#define LAIK_AT_ShmemMapGroupReduce (LAIK_AT_Backend + 47)
+#define LAIK_AT_ShmemMapBroadcast (LAIK_AT_Backend + 48)
 
 #pragma pack(push, 1)
 typedef struct{
@@ -60,7 +63,7 @@ typedef struct{
     int mapNo;
     int count;
     int to_rank;
-} Laik_A_ShmemCopyMapToReceiver;
+} Laik_A_ShmemGetMapAndCopy;
 
 typedef struct{
     Laik_Action h;
@@ -116,6 +119,23 @@ typedef struct
     char* buf;
 } Laik_A_ShmemGroupBroadCast;
 
+typedef struct 
+{
+    Laik_Action h;
+    Laik_Range* range;
+    int mapNo;
+    int count;
+    int to_rank;
+}Laik_A_ShmemTwoCopyMap;
+
+typedef struct
+{
+    Laik_Action h;
+    int mapNo;
+    int shmid;
+    int to_rank;
+}Laik_A_ShmemOneCopyMap;
+
 #pragma pack(pop)
 
 
@@ -128,14 +148,17 @@ void laik_shmem_addMapGroupReduce(Laik_ActionSeq* as, Laik_BackendAction* ba, in
 
 void laik_shmem_addReceiveMap(Laik_ActionSeq* as, Laik_Range* range, int mapNo, int round, int tid, int count, int from_rank, int chain_idx);
 
-void laik_shmem_addCopyMapToReceiver(Laik_ActionSeq* as, Laik_Range* range, int mapNo, int round, int tid, int count, int to_rank, int chain_idx);
-
 void laik_shmem_addGroupBroadcast(Laik_ActionSeq* as, Laik_BackendAction* ba, int round, char* buf, int chain_idx, int primary);
 
 void laik_shmem_addGroupReduce(Laik_ActionSeq* as, Laik_BackendAction* ba, int round, char* buf, int chain_idx, int primary);
 
 void laik_shmem_addShmemCopyToBuf(Laik_ActionSeq* as, int round, char* buf, char* toBuf, int count, int sender, int receiver, int tid, int chain_idx);
 
+void laik_shmem_addGetMapAndCopy(Laik_ActionSeq* as, Laik_Range* range, int mapNo, int round, int tid, int count, int to_rank, int chain_idx);
+
+void laik_shmem_addTwoCopyMap(Laik_ActionSeq* as, Laik_Range* range, int mapNo, int count, int receiver, int round, int tid, int chain_idx);
+
+void laik_shmem_addOneCopyMap(Laik_ActionSeq* as, int mapNo, int shmid, int receiver, int round, int tid, int chain_idx);
 
 //---------------------------------------------------------------------
 // execute secondary specific action
@@ -144,7 +167,7 @@ void laik_shmem_exec_GroupBroadCast(Laik_Action* a, Laik_ActionSeq* as, Laik_Tra
 
 void laik_shmem_exec_GroupReduce(Laik_Action * a, Laik_ActionSeq* as, Laik_TransitionContext* tc, Laik_Inst_Data* idata, Laik_Group* g);
 
-void laik_shmem_exec_CopyMapToReceiver(Laik_Action* a, Laik_TransitionContext* tc, Laik_Inst_Data* idata, Laik_Group* g);
+void laik_shmem_exec_GetMapAndCopy(Laik_Action* a, Laik_TransitionContext* tc, Laik_Inst_Data* idata, Laik_Group* g);
 
 void laik_shmem_exec_ReceiveMap(Laik_Action* a, Laik_TransitionContext* tc, Laik_Inst_Data* idata, Laik_Group* g);
 

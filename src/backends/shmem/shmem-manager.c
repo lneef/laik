@@ -20,6 +20,8 @@
 
 #include "backends/shmem/shmem.h"
 #include "laik.h"
+#include "laik/core.h"
+#include "laik/data.h"
 #include "shmem-allocator.h"
 #include "shmem-manager.h"
 #include <sys/shm.h>
@@ -30,7 +32,6 @@ struct shmemPair
     void* ptr;
     struct shmemPair* next;
 };
-
 
 struct shmemPair head;
 
@@ -76,6 +77,44 @@ void* def_shmem_malloc(Laik_Data* d, size_t size){
     int shmid;
     void* ptr = shmem_alloc(size, &shmid);
     return ptr;
+}
+
+Laik_Allocator* shmem_allocator()
+{
+    laik_log(1, "Allocator of shmem backend chosen for laik");
+    Laik_Allocator* shmemAllocator = laik_new_allocator(def_shmem_malloc, def_shmem_free, 0);
+    shmemAllocator->policy = LAIK_MP_NewAllocOnRepartition;
+    return shmemAllocator;
+}
+
+bool is_shmem_allocator(Laik_Allocator* allocator)
+{
+    return allocator!=NULL && allocator->malloc == def_shmem_malloc;
+}
+
+void* shmem_manager_attach(int shmid, int flag)
+{   
+    size_t header_size = PAD(HEADER_SIZE, HEADER_PAD);
+    void* ptr = shmat(shmid, NULL, flag);
+    if(ptr == (void*)-1)
+        laik_log(LAIK_LL_Panic, "Shared memory manager could not attach segment with id %d", shmid);
+
+    return ((char*)ptr) + header_size;
+}
+
+void shmem_manager_detach(void* ptr)
+{
+    size_t header_size = PAD(HEADER_SIZE, HEADER_PAD);
+    void* start = ((char*)ptr) - header_size;
+    if(shmdt(start) == -1)
+        laik_log(LAIK_LL_Panic, "Could not detach shared memory segment %p", ptr);
+}
+
+int shmem_manager_shmid(char* ptr)
+{
+    size_t header_size = PAD(HEADER_SIZE, HEADER_PAD);
+    struct shmHeader* hd = (struct shmHeader*) (ptr - header_size);
+    return hd->shmid;
 }
 
 

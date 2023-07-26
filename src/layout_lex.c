@@ -17,7 +17,9 @@
 
 #include "laik-internal.h"
 #include "laik.h"
+#include "laik/core.h"
 #include "laik/data.h"
+#include "laik/debug.h"
 
 #include <assert.h>
 #include <stdalign.h>
@@ -116,7 +118,9 @@ int64_t offset_lex(Laik_Layout* l, int n, Laik_Index* idx)
             off += (idx->i[2] - e->range.from.i[2]) * e->hd->stride[2];
         }
     }
-    assert((off >= 0) && (off < (int64_t) e->hd->count));
+
+    if(!((off >= 0) && (off < (int64_t) e->hd->count)))
+        laik_log(LAIK_LL_Panic, "%lu, %lu, %d, %lu, %lu", idx->i[0], idx->i[1], l->dims, e->range.to.i[0], e->range.to.i[1]);
     return off;
 }
 
@@ -216,7 +220,7 @@ void copy_lex(Laik_Range* range,
         laik_log_Range(range);
         laik_log_append(" (count %llu, elemsize %d) from mapping %p",
             ccount, elemsize, from->start);
-        laik_log_append(" (data '%s'/%d, %s) ",
+        laik_log_append(" (data '%s'/, ) ",
             from->data->name, from->mapNo,
             from->layout->describe(from->layout));
         laik_log_append("to mapping %p (data '%s'/%d, layout %s): ",
@@ -490,6 +494,11 @@ void laik_layout_init_lex(Laik_Mapping* m, char* header, int n)
 {
     Laik_Layout_Lex* ll = (Laik_Layout_Lex*)m->layout;
     Lex_Memory_Header* lold = ll->e[n].hd;
+    if(!header)
+    {
+        m->header = (char*)lold;
+        return;
+    }
 
     Lex_Memory_Header* hd = (Lex_Memory_Header*) header;
     hd->count = lold->count;
@@ -499,25 +508,6 @@ void laik_layout_init_lex(Laik_Mapping* m, char* header, int n)
 
     free(ll->e[n].hd);
     ll->e[n].hd = hd;
-}
-
-void laik_layout_lex_free(Laik_Mapping* m, int n)
-{   
-    Laik_Layout_Lex* ll = (Laik_Layout_Lex*)m->layout;
-
-    Laik_Allocator* a = m->allocator;
-    if(a)
-    {   
-        assert(m->allocator->free);
-        laik_log(1, "Freeing memory allocated with Laik_Allocator: %d", m->mapNo);
-        a->free(m->data, m->header);
-    }
-    else if(!m->header)
-    {
-        laik_log(1, "Freeing header for user provided memory map: %d", m->mapNo);
-        free(ll->e[n].hd);
-    }
-
 }
 
 // create layout for lexicographical layout covering <n> ranges
@@ -539,8 +529,7 @@ Laik_Layout* laik_new_layout_lex(int n, Laik_Range* ranges)
                      pack_lex,
                      unpack_lex,
                      copy_lex,
-                     laik_layout_init_lex,
-                     laik_layout_lex_free);
+                     laik_layout_init_lex);
 
     uint64_t count = 0;
     strncpy(l->h.name, LEX_IDENTIFIER, 9);

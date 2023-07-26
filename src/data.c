@@ -408,6 +408,7 @@ Laik_MappingList* prepareMaps(Laik_Data* d, Laik_Partitioning* p)
             laik_log(1, "  using provided memory (%lld bytes at %p with layout %s)",
                      (unsigned long long int) d->map0_size, d->map0_base,
                      layout->describe(m->layout));
+            m->layout->init(m, NULL, m->layoutSection);
         }
     }
 
@@ -441,13 +442,17 @@ uint64_t freeMap(Laik_Mapping* m, Laik_Data* d, Laik_SwitchStat* ss)
 
     // if allocator is given, use it to free memory
     uint64_t freed = 0;
-    m->layout->free(m, m->layoutSection);
+    //m->layout->free(m, m->layoutSection);
     if (m->allocator) {
+        m->allocator->free(m->data, m->header);
         laik_switchstat_free(ss, m->capacity);
-        freed = m->capacity;        
-
+        freed = m->capacity;
+        
         //free header(points to begin of section)
         //(m->allocator->free)(d, m->header);
+    }else if(m->header){
+        //user provided memory
+        free(m->header);
     }
 
     m->header = 0;
@@ -471,8 +476,8 @@ uint64_t freeMappingList(Laik_MappingList* ml, Laik_SwitchStat* ss)
     for(int i = 0; i < ml->count; i++) {
         Laik_Mapping* m = &(ml->map[i]);
         assert(m != 0);
+        // different free layouts
 
-        if (ml->layout != m->layout) m->layout->free(m, m->layoutSection);
         freed += freeMap(m, m->data, ss);
     }
 
@@ -649,7 +654,6 @@ void initEmbeddedMapping(Laik_Mapping* toMap, Laik_Mapping* fromMap)
 
     // use allocator of fromMap to deallocate memory
     toMap->allocator = fromMap->allocator;
-    fromMap->allocator = 0;
 
     // set <base> of embedded mapping according to required vs. allocated
     uint64_t off = laik_offset(toMap->layout, toMap->layoutSection, &(toMap->requiredRange.from));

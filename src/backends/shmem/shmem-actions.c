@@ -1,7 +1,6 @@
 
 #include "shmem-actions.h"
-#include "laik/core.h"
-#include "laik/space.h"
+#include "backends/shmem/shmem-manager.h"
 #include "shmem.h"
 
 #include <laik-internal.h>
@@ -49,10 +48,10 @@ void laik_shmem_addReceiveMap(Laik_ActionSeq* as, Laik_Range* range, int mapNo, 
     a->from_rank = from_rank;
 }
 
-void laik_shmem_addCopyMapToReceiver(Laik_ActionSeq* as, Laik_Range* range, int mapNo, int round, int tid, int count, int to_rank, int chain_idx)
+void laik_shmem_addGetMapAndCopy(Laik_ActionSeq* as, Laik_Range* range, int mapNo, int round, int tid, int count, int to_rank, int chain_idx)
 {
-    Laik_A_ShmemCopyMapToReceiver *a;
-    a = (Laik_A_ShmemCopyMapToReceiver*) laik_aseq_addAction(as, sizeof(*a), LAIK_AT_ShmemCopyMapToReceiver, round, tid);
+    Laik_A_ShmemGetMapAndCopy *a;
+    a = (Laik_A_ShmemGetMapAndCopy*) laik_aseq_addAction(as, sizeof(*a), LAIK_AT_ShmemGetMapAndCopy, round, tid);
     a->h.chain_idx = chain_idx;
     a->range = range;
     a->mapNo = mapNo;
@@ -96,6 +95,36 @@ void laik_shmem_addShmemCopyToBuf(Laik_ActionSeq* as, int round, char* buf, char
     a->sender = sender;
     a->receiver = receiver;
 
+}
+
+void laik_shmem_addTwoCopyMap(Laik_ActionSeq* as, Laik_Range* range, int mapNo, int count, int receiver, int round, int tid, int chain_idx)
+{
+    Laik_A_ShmemTwoCopyMap* a;
+    a = (Laik_A_ShmemTwoCopyMap*) laik_aseq_addAction(as, sizeof(*a), LAIK_AT_ShmemTwoCopyMap, round, tid);
+    a->h.chain_idx = chain_idx;
+    a->mapNo = mapNo;
+    a->range = range;
+    a->count = count;
+    a->to_rank = receiver;
+}
+
+void laik_shmem_addOneCopyMap(Laik_ActionSeq* as, int mapNo, int shmid, int receiver, int round, int tid, int chain_idx)
+{
+    Laik_A_ShmemOneCopyMap* a;
+    a = (Laik_A_ShmemOneCopyMap*) laik_aseq_addAction(as, sizeof(*a), LAIK_AT_ShmemOneCopyMap, round, tid);
+    a->h.chain_idx = chain_idx;
+    a->mapNo = mapNo;
+    a->shmid = shmid;
+    a->to_rank = receiver;
+}
+
+void laik_shmem_exec_TwoCopyMap(Laik_Action* a, Laik_TransitionContext* tc, Laik_Inst_Data* idata, Laik_Group* g)
+{
+    Laik_A_ShmemTwoCopyMap* aa = (Laik_A_ShmemTwoCopyMap*) a;
+    Laik_Mapping* m = &tc->fromList->map[aa->mapNo];
+        
+    shmem_PackSend(m, *aa->range, aa->count, aa->to_rank, idata, g);
+    
 }
 
 
@@ -158,18 +187,21 @@ void laik_shmem_exec_CopyToBuf(Laik_Action* a, Laik_TransitionContext* tc, Laik_
     }
 }
 
-void laik_shmem_exec_CopyMapToReceiver(Laik_Action* a, Laik_TransitionContext* tc, Laik_Inst_Data* idata, Laik_Group* g)
+
+void laik_shmem_exec_GetMapAndCopy(Laik_Action* a, Laik_TransitionContext* tc, Laik_Inst_Data* idata, Laik_Group* g)
 {
-    Laik_A_ShmemCopyMapToReceiver* aa = (Laik_A_ShmemCopyMapToReceiver*) a;
+    Laik_A_ShmemGetMapAndCopy* aa = (Laik_A_ShmemGetMapAndCopy*) a;
+    Laik_Shmem_Data* sd = idata->backend_data;
 
     Laik_Mapping* map = &tc->fromList->map[aa->mapNo];
 
-    if(!map->header)
+    if(is_shmem_allocator(map->allocator) && sd->copyScheme == 1)
     {
-        shmem_PackSend(map, *aa->range, aa->count, aa->to_rank, idata, g);
+        int shmid = shmem_manager_shmid(map->header);
+        shmem_sendMap(map, aa->to_rank, shmid, idata, g);
     }
     else {
-        shmem_sendMap(map, aa->to_rank, idata, g);
+        shmem_PackSend(map, *aa->range, aa->count, aa->to_rank, idata, g);
     }
 }
 

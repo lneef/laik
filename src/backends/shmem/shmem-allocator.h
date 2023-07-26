@@ -19,6 +19,15 @@
 
 #include "laik.h"
 
+struct shmHeader
+{
+    int size;
+    int shmid;
+};
+
+#define HEADER_SIZE (sizeof(struct shmHeader))
+#define HEADER_PAD 64
+
 void shmem_free(void* ptr);
 
 void deleteAllocatedSegments();
