@@ -55,15 +55,12 @@ void laik_init_secondaries_int(Laik_Instance* inst, Laik_Group* world, int prima
 {
     
     int size = primarySize;
-    (void) primaryRank;
-    int* newLocs;
-    int* locs = world->locationid;
+    int rank =  primaryRank;
+
     for(int i = 1; i < num; ++i)
     {
         if(!strcmp(backends[i],"SHMEM" ))
-            laik_shmem_secondary_init(inst, world, &size, locs, &newLocs);
-
-        locs = newLocs;
+            laik_shmem_secondary_init(inst, world, &size, &rank);
     }
 }
 
@@ -181,16 +178,13 @@ void laik_init_secondaries(Laik_Instance* inst, Laik_Group* world, int primaryRa
     name = strtok_r(sec, ",", &saveptr);
     
     int size = primarySize;
-    (void) primaryRank;
-    int* newLocs;
-    int* locs = world->locationid;
+    int rank = primaryRank;
     
     for(;name!=NULL;)
     {           
         if(!strcmp(name,"SHMEM" ))
-            laik_shmem_secondary_init(inst, world, &size, locs, &newLocs);
+            laik_shmem_secondary_init(inst, world, &size, &rank);
 
-        locs = newLocs;
         name = strtok_r(NULL, ",", &saveptr);
     }
 }
@@ -606,12 +600,8 @@ Laik_Group* laik_new_shrinked_group(Laik_Group* g, int len, int* list)
     g2->myid = (g->myid < 0) ? -1 : g2->fromParent[g->myid];
     if (g->inst->backend->updateGroup)
     {   
-        int* ranks = malloc(g2->size * sizeof(int));
-        for(int i = 0; i < g2->size; ++i) ranks[i] = i;
 
-        (g->inst->backend->updateGroup)(g->inst->inst_data, g2, ranks, o);
-
-        free(ranks);
+        (g->inst->backend->updateGroup)(g->inst->inst_data, g2, g2->myid, g2->size);
     }
 
     if (laik_log_begin(1)) {

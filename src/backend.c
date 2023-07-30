@@ -35,9 +35,9 @@ void laik_next_cleanup(Laik_Inst_Data* idata, Laik_ActionSeq* as)
     if(idata->next_backend) idata->next_backend->cleanup(idata->next, as);
 }
 
-void laik_next_updateGroup(Laik_Inst_Data* idata, Laik_Group* g, int* ranks, int size)
+void laik_next_updateGroup(Laik_Inst_Data* idata, Laik_Group* g, int rank, int size)
 {
-    if(idata->next_backend) idata->next_backend->updateGroup(idata->next, g, ranks, size);
+    if(idata->next_backend) idata->next_backend->updateGroup(idata->next, g, rank, size);
 }
 
 Laik_Action* laik_next_exec(Laik_Inst_Data* idata, Laik_ActionSeq* as)

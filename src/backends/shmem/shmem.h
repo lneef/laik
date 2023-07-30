@@ -51,14 +51,18 @@ struct commHeader{
 #pragma pack(push, 1)
 typedef struct _Laik_Shmem_Comm
 {
+    int myid;
+
     // size of the partition I am part of
     int size;
 
     // identifier of my partition
-    int colour;
+    int location;
+
+    int* secondaryIds;
 
     // divsion of the world group
-    int* divsion;
+    int* locations;
 
     // number of shared memory islands
     int numIslands;
@@ -88,15 +92,11 @@ typedef struct _Laik_Shmem_Data
 
 int shmem_error_string(int error, char *str);
 
-int shmem_secondary_init(Laik_Shmem_Comm* sg, Laik_Inst_Data* idata, Laik_Group* world, int primarySize, int* ranks, int** new_ranks);
+int shmem_secondary_init(Laik_Shmem_Comm* sg, Laik_Inst_Data* idata, Laik_Group* world, int primarySize, int rank);
 
-int shmem_comm_size(Laik_Shmem_Comm* sg, int *sizePtr);
+int shmem_location(Laik_Inst_Data* sd, Laik_Group*g);
 
-int shmem_comm_colour(Laik_Shmem_Comm* sg, int *colourPtr);
-
-int shmem_get_colours(Laik_Shmem_Comm* sg, int **buf);
-
-int shmem_get_numIslands(Laik_Shmem_Comm* sg, int *num);
+int shmem_myid(Laik_Inst_Data* sd, Laik_Group*g);
 
 int shmem_finalize();
 
@@ -126,7 +126,7 @@ void createBuffer();
 
 void request_CpyBuf(size_t size);
 
-int shmem_init_comm(Laik_Shmem_Comm *sg, Laik_Group *g, Laik_Inst_Data *idata, int* ranks, int** new_ranks, int size);
+int shmem_init_comm(Laik_Shmem_Comm *sg, Laik_Group *g, Laik_Inst_Data *idata, int rank, int size);
 
 bool onSameIsland(Laik_ActionSeq* as, Laik_Shmem_Comm* sg, int inputgroup, int outputgroup, int chain_idx);
 

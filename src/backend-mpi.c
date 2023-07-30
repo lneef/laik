@@ -40,7 +40,7 @@ static void laik_mpi_finalize(Laik_Inst_Data*, Laik_Instance*);
 static void laik_mpi_prepare(Laik_Inst_Data*, Laik_ActionSeq*);
 static void laik_mpi_cleanup(Laik_Inst_Data*, Laik_ActionSeq*);
 static void laik_mpi_exec(Laik_Inst_Data*, Laik_ActionSeq* as);
-static void laik_mpi_updateGroup(Laik_Inst_Data*, Laik_Group*, int* rank, int size);
+static void laik_mpi_updateGroup(Laik_Inst_Data*, Laik_Group*, int rank, int size);
 static bool laik_mpi_log_action(Laik_Inst_Data*, Laik_ActionSeq* as, Laik_Action* a);
 static void laik_mpi_sync(Laik_KVStore* kvs);
 
@@ -451,7 +451,7 @@ void laik_mpi_finalize(Laik_Inst_Data* idata, Laik_Instance* inst)
 // update backend specific data for group if needed
 static
 void 
-laik_mpi_updateGroup(Laik_Inst_Data* idata, Laik_Group* g, int* ranks, int size)
+laik_mpi_updateGroup(Laik_Inst_Data* idata, Laik_Group* g, int rank, int size)
 {
     // calculate MPI communicator for group <g>
     // TODO: only supports shrinking of parent for now
@@ -487,7 +487,7 @@ laik_mpi_updateGroup(Laik_Inst_Data* idata, Laik_Group* g, int* ranks, int size)
         laik_mpi_panic(err);
     g->backend_data[idata->index] = gd;
 
-    laik_next_updateGroup(idata, g, ranks, size);
+    laik_next_updateGroup(idata, g, rank, size);
 }
 
 static MPI_Datatype getMPIDataType(Laik_Data *d)

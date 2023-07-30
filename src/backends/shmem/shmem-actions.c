@@ -133,8 +133,10 @@ void laik_shmem_exec_GroupBroadCast(Laik_Action* a, Laik_ActionSeq* as, Laik_Tra
     Laik_A_ShmemGroupBroadCast* ba = (Laik_A_ShmemGroupBroadCast*) a;
     Laik_Data * data = tc -> data;
     int chain_idx = a -> chain_idx;
+    Laik_Shmem_Comm* sg = g->backend_data[idata->index];
 
-    if(g->myid == ba->primary)
+
+    if(sg->myid == ba->primary)
     {
         int count = laik_aseq_groupCount(as, ba->subgroup, chain_idx);
 
@@ -155,8 +157,9 @@ void laik_shmem_exec_GroupReduce(Laik_Action * a, Laik_ActionSeq* as, Laik_Trans
     Laik_A_ShmemGroupReduce* ba = (Laik_A_ShmemGroupReduce*) a;
     Laik_Data* data = tc -> data;
     int chain_idx = a->chain_idx;
+    Laik_Shmem_Comm* sg = g->backend_data[idata->index];
 
-    if(g->myid == ba->primary)
+    if(sg->myid == ba->primary)
     {    
         memcpy(ba->buf, ba->fromBuf, ba->count * data->elemsize);
         int count = laik_aseq_groupCount(as, ba->subgroup, chain_idx);
@@ -175,9 +178,10 @@ void laik_shmem_exec_GroupReduce(Laik_Action * a, Laik_ActionSeq* as, Laik_Trans
 void laik_shmem_exec_CopyToBuf(Laik_Action* a, Laik_TransitionContext* tc, Laik_Inst_Data* idata, Laik_Group* g)
 {
     Laik_A_ShmemCopyToBuf* ba = (Laik_A_ShmemCopyToBuf*) a;
+    Laik_Shmem_Comm* sg = g->backend_data[idata->index];
     Laik_Data* data = tc -> data;
 
-    int rank = g->myid;
+    int rank = sg->myid;
     if(ba->sender == ba->receiver){
         memcpy(ba -> toBuf, ba -> fromBuf, data->elemsize * ba -> count);
     }else if (rank == ba->sender) {
@@ -222,9 +226,10 @@ void laik_shmem_exec_MapGroupReduce(Laik_ActionSeq* as, Laik_Action* a, Laik_Tra
     Laik_Mapping* map = &tc->fromList->map[aa->mapNo];
     Laik_Data* data = tc->data;
     int chain_idx = a->chain_idx;
+    Laik_Shmem_Comm* sg = g->backend_data[idata->index];
     Laik_Range tmp = *aa->range;
     
-    if(aa->primary == g->myid)
+    if(aa->primary == sg->myid)
     {
         map->layout->pack(map, &tmp, &(tmp.from), aa->buf, aa->count * data->elemsize);
         int count = laik_aseq_groupCount(as, aa->subgroup, chain_idx);
@@ -248,8 +253,9 @@ void laik_shmem_exec_MapBroadCast(Laik_ActionSeq* as , Laik_Action* a, Laik_Tran
     int chain_idx = a->chain_idx;
     Laik_Data* data = tc->data;
     Laik_Mapping* map = &tc->toList->map[aa->mapNo];
+    Laik_Shmem_Comm* sg = g->backend_data[idata->index];
     
-    if(aa->primary == g->myid)
+    if(aa->primary == sg->myid)
     {   
         map->layout->unpack(map, aa->range, &(aa->range->from), aa->buf, aa->count * data -> elemsize);
         

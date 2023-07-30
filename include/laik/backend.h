@@ -62,7 +62,7 @@ struct _Laik_Backend {
   void (*exec)(Laik_Inst_Data*, Laik_ActionSeq*);
 
   // update )backend specific data for group if needed
-  void (*updateGroup)(Laik_Inst_Data*, Laik_Group*, int* ranks, int size);
+  void (*updateGroup)(Laik_Inst_Data*, Laik_Group*, int rank, int size);
 
   // sync of key-value store
   void (*sync)(Laik_KVStore* kvs);
@@ -96,7 +96,7 @@ void laik_next_prepare(Laik_Inst_Data* idata, Laik_ActionSeq* as);
 
 void laik_next_cleanup(Laik_Inst_Data* idata, Laik_ActionSeq* as);
 
-void laik_next_updateGroup(Laik_Inst_Data* idata, Laik_Group* g, int* ranks, int size);
+void laik_next_updateGroup(Laik_Inst_Data* idata, Laik_Group* g, int rank, int size);
 
 Laik_Action* laik_next_exec(Laik_Inst_Data* idata, Laik_ActionSeq* as);
 

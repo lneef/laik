@@ -21,6 +21,8 @@
 #include "backends/shmem/shmem-cpybuf.h"
 #include "backends/shmem/shmem-manager.h"
 #include "laik.h"
+#include "laik/backend.h"
+#include "laik/core.h"
 #include "laik/space.h"
 #include "shmem-allocator.h"
 #include "laik-internal.h"
@@ -71,32 +73,16 @@ static int createMetaInfoSeg()
     return SHMEM_SUCCESS;
 }
 
-int shmem_get_numIslands(Laik_Shmem_Comm* sg, int* num){
-    *num = sg->numIslands;
-    return SHMEM_SUCCESS;
-}
-
-int shmem_get_primarys(Laik_Shmem_Comm* sg, int** primarys){
-    *primarys = sg->primaryRanks;
-    return SHMEM_SUCCESS;
-}
-
-int shmem_get_colours(Laik_Shmem_Comm* sg, int **buf)
+int shmem_location(Laik_Inst_Data* idata, Laik_Group* g)
 {
-    *buf = sg->divsion;
-    return SHMEM_SUCCESS;
+    Laik_Shmem_Comm* sg = g->backend_data[idata->index];
+    return sg->location;
 }
 
-int shmem_comm_size(Laik_Shmem_Comm* sg, int *sizePtr)
+int shmem_myid(Laik_Inst_Data* idata, Laik_Group* g)
 {
-    *sizePtr = sg->size;
-    return SHMEM_SUCCESS;
-}
-
-int shmem_comm_colour(Laik_Shmem_Comm* sg, int *colourPtr)
-{
-    *colourPtr = sg->colour;
-    return SHMEM_SUCCESS;
+    Laik_Shmem_Comm* sg = g->backend_data[idata->index];
+    return sg->myid;
 }
 
 Laik_Shmem_Comm* shmem_comm(Laik_Inst_Data* idata, Laik_Group* g)
@@ -144,14 +130,13 @@ int shmem_1cpy_send(void *buffer, int count, int datatype, int recipient)
 int shmem_recv(void *buffer, int count,int sender, Laik_Data* data, Laik_Inst_Data* idata, Laik_Group* g, Laik_ReductionOperation redOp)
 {
     int shmid;
-    RECV_INTS(&shmid, 1, sender, idata, g);
+    Laik_Shmem_Comm* sg = shmem_comm(idata, g);
+    RECV_INTS(&shmid, 1, sg->primaryRanks[sender], idata, g);
     
     // Attach to the segment to get a pointer to it.
     struct commHeader *shmp = shmem_manager_attach(shmid, 0);
-    if (shmp == (void *)-1)
-        return SHMEM_SHMAT_FAILED;
 
-    while (shmp->receiver != g->myid)
+    while (shmp->receiver != sg->myid)
     {
     }
 
@@ -191,7 +176,8 @@ int shmem_recv(void *buffer, int count,int sender, Laik_Data* data, Laik_Inst_Da
 
 int shmem_sendMap(Laik_Mapping* map, int receiver, int shmid, Laik_Inst_Data* idata, Laik_Group* g)
 {
-    SEND_INTS(&headerShmid, 1, receiver, idata, g);
+    Laik_Shmem_Comm* sg = shmem_comm(idata, g);
+    SEND_INTS(&headerShmid, 1, sg->primaryRanks[receiver], idata, g);
 
     shmp->spec = MAP;
     shmp->shmid = shmid;
@@ -206,7 +192,8 @@ int shmem_sendMap(Laik_Mapping* map, int receiver, int shmid, Laik_Inst_Data* id
 int shmem_PackSend(Laik_Mapping* map, Laik_Range range, int count, int receiver,  Laik_Inst_Data* idata, Laik_Group* g)
 {   
     shmem_cpybuf_alloc(&cpyBuf, count * map->data->elemsize);
-    SEND_INTS(&headerShmid, 1, receiver, idata, g);
+    Laik_Shmem_Comm* sg = shmem_comm(idata, g);
+    SEND_INTS(&headerShmid, 1, sg->primaryRanks[receiver], idata, g);
     Laik_Index from = range.from;
     //pack makes changes to range
     shmp->shmid = cpyBuf.shmid;
@@ -259,10 +246,11 @@ static inline int shmem_cpyMap(Laik_Mapping* map, Laik_Range* range, struct comm
 int shmem_recvMap(Laik_Mapping* map, Laik_Range* range, int count, int sender,  Laik_Inst_Data* idata, Laik_Group* g)
 {
     int shmid, ret = SHMEM_FAILURE;
-    RECV_INTS(&shmid, 1, sender, idata, g);
+    Laik_Shmem_Comm* sg = shmem_comm(idata, g);
+    RECV_INTS(&shmid, 1, sg->primaryRanks[sender], idata, g);
 
     struct commHeader* shmp = shmem_manager_attach(shmid, 0);
-    while(shmp->receiver != g->myid)
+    while(shmp->receiver != sg->myid)
     {
     }
     char* ptr = shmem_manager_attach(shmp->shmid, 0);
@@ -282,11 +270,12 @@ int shmem_recvMap(Laik_Mapping* map, Laik_Range* range, int count, int sender,  
 
 int shmem_RecvUnpack(Laik_Mapping *map, Laik_Range *range, int count, int sender,  Laik_Inst_Data* idata, Laik_Group* g)
 {
-    int shmid;
-    RECV_INTS(&shmid, 1, sender, idata, g);
+    int shmid;    
+    Laik_Shmem_Comm* sg = shmem_comm(idata, g);
+    RECV_INTS(&shmid, 1, sg->primaryRanks[sender], idata, g);
 
     struct commHeader* shmp = shmem_manager_attach(shmid, 0);
-    while(shmp->receiver != g->myid)
+    while(shmp->receiver != sg->myid)
     {
     }
     char* ptr = shmem_manager_attach(shmp->shmid, 0);
@@ -302,11 +291,12 @@ int shmem_RecvUnpack(Laik_Mapping *map, Laik_Range *range, int count, int sender
 int shmem_RecvReduce(char* buf, int count, int sender, Laik_Type* type, Laik_ReductionOperation redOp,  Laik_Inst_Data* idata, Laik_Group* g)
 {
     int shmid;
-    RECV_INTS(&shmid, 1, sender, idata, g);
+    Laik_Shmem_Comm* sg = shmem_comm(idata, g);
+    RECV_INTS(&shmid, 1, sg->primaryRanks[sender], idata, g);
 
     struct commHeader* shmp = shmem_manager_attach(shmid, 0);
-    assert(shmp != (void*) -1);
-    while(shmp->receiver != g->myid)
+
+    while(shmp->receiver != sg->myid)
     {
     } 
     assert(shmp->spec == PACK);
@@ -325,7 +315,8 @@ int shmem_RecvReduce(char* buf, int count, int sender, Laik_Type* type, Laik_Red
 int shmem_send(void* buffer, int count, int datatype, int receiver, Laik_Inst_Data* idata, Laik_Group* g)
 {
     Laik_Shmem_Data* sd = (Laik_Shmem_Data*) idata->backend_data;
-    SEND_INTS(&headerShmid, 1, receiver, idata, g);
+    Laik_Shmem_Comm* sg = shmem_comm(idata, g);
+    SEND_INTS(&headerShmid, 1, sg->primaryRanks[receiver], idata, g);
     return sd->send(buffer, count, datatype, receiver);
 }
 
@@ -375,12 +366,27 @@ static int pair(int colour, int rank)
     return tmp/2 + colour + 1;
 }
 
-int shmem_update_comm(Laik_Shmem_Comm* sg, Laik_Group* g, Laik_Inst_Data* idata, int size, int shmAddr, int* ranks, int** new_ranks)
+int shmem_update_comm(Laik_Shmem_Comm* sg, Laik_Group* g, Laik_Inst_Data* idata, int size, int shmAddr, int rank)
 {
     Laik_Shmem_Data* sd = (Laik_Shmem_Data*) idata->backend_data;
     bool created = false;
     struct shmInitSeg* shmp;
-    int address = shmAddr + pair(ranks[0], idata->index);
+
+    int mask;
+    if(rank == 0)
+    {
+        for(int i = 1; i < size; ++i)
+        {
+            SEND_INTS(&g->myid, 1, i, idata, g);
+        }
+        mask = g->myid;
+
+    }else {
+        RECV_INTS(&mask, 1, 0, idata, g);
+    }
+
+
+    int address = shmAddr + pair(mask, 0);
     int shmid = shmget(address, sizeof(struct shmInitSeg), IPC_EXCL | 0644 | IPC_CREAT);
     if (shmid == -1)
     {
@@ -398,93 +404,99 @@ int shmem_update_comm(Laik_Shmem_Comm* sg, Laik_Group* g, Laik_Inst_Data* idata,
         if (shmp == (void *)-1)
             return SHMEM_SHMAT_FAILED;
         
-        if(g->myid == ranks[0])
+        if(rank == 0)
         {
             for(int i = 1; i<size; ++i)
             {   
                 int barrier;
-                RECV_INTS(&barrier, 1, ranks[i], idata, g);
+                RECV_INTS(&barrier, 1, i, idata, g);
             }
         }else {
-            SEND_INTS(&g->myid, 1, ranks[0], idata, g);
+            SEND_INTS(&g->myid, 1, 0, idata, g);
         }
 
-        sg->colour = atomic_load(&shmp->colour);
+        sg->location = atomic_load(&shmp->colour);
 
     }
     else
     {
         created = true;
         // Master initialization
-        sg->colour = g->myid;
+        sg->location = g->myid;
         
         shmp = shmat(shmid, NULL, 0);
         if (shmp == (void *)-1)
             return SHMEM_SHMAT_FAILED;
 
         atomic_init(&shmp->colour, g->myid);
-        if(g->myid == ranks[0])
+        if(rank == 0)
         {
             for(int i = 1; i<size; ++i)
             {   
                 int barrier;
-                RECV_INTS(&barrier, 1, ranks[i], idata, g);
+                RECV_INTS(&barrier, 1, i, idata, g);
             }
         }else {
-            SEND_INTS(&g->myid, 1, ranks[0], idata, g);
+            SEND_INTS(&g->myid, 1, 0, idata, g);
         }
 
         // global id in laik as identifier for shared memory domain
     }    
 
     // Get the colours of each process at master, calculate the groups and send each process their group.
-    if (g->myid == ranks[0])
+    if (rank == 0)
     {
-        int master = ranks[0];
-        sg->divsion = malloc(g->size * sizeof(int));
+        sg->locations = malloc(size * sizeof(int));
         int* tmpColours = malloc(g->size * sizeof(int));
+        sg->secondaryIds = malloc(size * sizeof(int));
 
         memset(tmpColours, -1, g->size * sizeof(int));
-        memset(sg->divsion, -1, g->size * sizeof(int));
 
         int newColour = 0;
         int* groupSizes = calloc(g->size , sizeof(int));
 
         // rank 0 is always rank 0
-        sg->divsion[master] = 0;
+        sg->locations[0] = 0;
 
         // get colour and mark rank 0 as processed
 
         int num_islands = 1;
         groupSizes[0] = 1;
-        int colour = sg->colour;
+        sg->myid = 0;
+        sg->locations[0] = 0;
+        sg->secondaryIds[0] = 0;
+        int colour = sg->location;
 
-        tmpColours[sg->colour] = newColour++;
-        sg->colour = tmpColours[sg->colour];
+        tmpColours[sg->location] = newColour++;
+        sg->location = tmpColours[sg->location];
 
         if(groupSizes[0] == sd->ranksPerIslands) 
-                tmpColours[colour] = newColour++;
+            tmpColours[colour] = newColour++;
 
 
         for (int i = 1; i < size; i++)
         {   
-            int ii = ranks[i];
-            RECV_INTS(&colour, 1, ii, idata, g);
+            RECV_INTS(&colour, 1, i, idata, g);
 
             if(tmpColours[colour] == -1)
                 tmpColours[colour] = newColour++;
 
-            SEND_INTS(&tmpColours[colour], 1, ii, idata, g);
+            SEND_INTS(&tmpColours[colour], 1, i, idata, g);
 
             
             // get division and new rank
-            sg->divsion[ii] = tmpColours[colour];
-            if(groupSizes[sg->divsion[ii]] == 0) num_islands++;
-            groupSizes[sg->divsion[ii]]++;
+            sg->locations[i] = tmpColours[colour];
+            if(groupSizes[sg->locations[i]] == 0) num_islands++;
+            int new_rank = groupSizes[sg->locations[i]]++;
             
             // if we reached <perIsland> ranks <colour> if mappes to a higher number
-            if(groupSizes[sg->divsion[ii]] >= sd->ranksPerIslands) 
+            if(groupSizes[sg->locations[i]] >= sd->ranksPerIslands) 
                 tmpColours[colour] = newColour++;
+            
+            sg->secondaryIds[i] = new_rank;
+
+            SEND_INTS(&new_rank, 1, i, idata, g);
+            
         }
 
 
@@ -498,22 +510,24 @@ int shmem_update_comm(Laik_Shmem_Comm* sg, Laik_Group* g, Laik_Inst_Data* idata,
 
         sg->numIslands = num_islands;
 
-        for (int id = 1; id < size; id++)
+        for (int i = 1; i < size; i++)
         {
-            int ii = ranks[id];
-            SEND_INTS(&groupSizes[sg->divsion[ii]], 1, ii, idata, g);
-            SEND_INTS(sg->divsion, g->size, ii, idata, g);
-            SEND_INTS(&num_islands, 1, ii, idata, g);
+            SEND_INTS(&groupSizes[sg->locations[i]], 1, i, idata, g);
+            SEND_INTS(sg->secondaryIds, size, i, idata, g);
+            SEND_INTS(sg->locations, size, i, idata, g);
+            SEND_INTS(&num_islands, 1, i, idata, g);
         }
-        sg->size = groupSizes[sg->divsion[master]];
+        sg->size = groupSizes[sg->locations[0]];
 
         free(groupSizes);
     }
     else
     {
-        SEND_INTS(&sg->colour, 1, ranks[0], idata, g);
+        SEND_INTS(&sg->location, 1, 0, idata, g);
 
-        RECV_INTS(&sg->colour, 1, ranks[0], idata, g);
+        RECV_INTS(&sg->location, 1, 0, idata, g);
+
+        RECV_INTS(&sg->myid, 1, 0, idata, g);
 
         if (shmdt(shmp) == -1)
             return SHMEM_SHMDT_FAILED;
@@ -521,35 +535,36 @@ int shmem_update_comm(Laik_Shmem_Comm* sg, Laik_Group* g, Laik_Inst_Data* idata,
         if (created && shmctl(shmid, IPC_RMID, 0) == -1)
             return SHMEM_SHMCTL_FAILED;
 
-        RECV_INTS(&sg->size, 1, ranks[0], idata, g);
-        sg->divsion = malloc(g->size * sizeof(int));
-        RECV_INTS(sg->divsion, g->size, ranks[0], idata, g);
+        RECV_INTS(&sg->size, 1, 0, idata, g);
+        sg->locations = malloc(g->size * sizeof(int));
+        sg->secondaryIds = malloc(size * sizeof(int));
 
-        RECV_INTS(&sg->numIslands, 1, ranks[0], idata, g);
+        RECV_INTS(sg->secondaryIds, size, 0, idata, g);
+        RECV_INTS(sg->locations, g->size, 0, idata, g);
+
+        RECV_INTS(&sg->numIslands, 1, 0, idata, g);
     }
     sg->primaryRanks = malloc(sg->size * sizeof(int));
 
     int ii = 0;
     for(int i = 0; i < size && ii < sg->size; ++i)
     {
-        if(sg->divsion[ranks[i]] == sg->colour){
-            sg->primaryRanks[ii++] = ranks[i]; 
+        if(sg->locations[i] == sg->location){
+            sg->primaryRanks[ii++] = i; 
         } 
     }
-    *new_ranks = sg->primaryRanks;
-
     return SHMEM_SUCCESS;
     
 }
 
-int shmem_init_comm(Laik_Shmem_Comm *sg, Laik_Group *g, Laik_Inst_Data *idata, int* ranks, int** new_ranks, int size)
+int shmem_init_comm(Laik_Shmem_Comm *sg, Laik_Group *g, Laik_Inst_Data *idata, int rank, int size)
 {
-    return shmem_update_comm(sg, g, idata,size, SHM_RESIZE_KEY, ranks, new_ranks);
+    return shmem_update_comm(sg, g, idata,size, SHM_RESIZE_KEY, rank);
 }
 
 static char* saveptrR;
 static char* saveptrC;
-int shmem_secondary_init(Laik_Shmem_Comm* sg, Laik_Inst_Data* idata, Laik_Group* world, int primarySize, int* ranks, int** new_ranks)
+int shmem_secondary_init(Laik_Shmem_Comm* sg, Laik_Inst_Data* idata, Laik_Group* world, int primarySize, int rank)
 {
     signal(SIGINT, deleteOpenShmSegs);
     Laik_Shmem_Data* sd = malloc(sizeof(Laik_Shmem_Data));
@@ -596,12 +611,12 @@ int shmem_secondary_init(Laik_Shmem_Comm* sg, Laik_Inst_Data* idata, Laik_Group*
     sd->ranksPerIslands = perIsland;
     idata->backend_data = sd;
 
-    shmem_update_comm(sg, world, idata, primarySize, SHM_KEY, ranks, new_ranks);
+    shmem_update_comm(sg, world, idata, primarySize, SHM_KEY, rank);
 
     // Open the own meta info shm segment and set it to ready
     if(headerShmid == -1) createMetaInfoSeg();
 
-    laik_log(1, "Shared Memory Backend: T%d is on Island:%d", world->myid, sg->colour);
+    laik_log(1, "Shared Memory Backend: T%d is T%d on Island:%d", world->myid, sg->myid, sg->location);
     return SHMEM_SUCCESS;
 }
 
@@ -623,17 +638,17 @@ void shmem_transformSubGroup(Laik_ActionSeq* as, Laik_Shmem_Comm* sg, int chain_
         {
             int inTask = laik_aseq_taskInGroup(as,  subgroup, i, last_idx);
 
-            if(!processed[sg->divsion[inTask]])
+            if(!processed[sg->locations[inTask]])
             {
                 laik_aseq_updateTask(as, subgroup, last, inTask, last_idx);
                 ++last;
-                assert(sg->divsion[inTask] >= 0);
-                processed[sg->divsion[inTask]] = true;
+                assert(sg->locations[inTask] >= 0);
+                processed[sg->locations[inTask]] = true;
             }
 
-            if(sg->colour == sg->divsion[inTask])
+            if(sg->location == sg->locations[inTask])
             {
-                tmp[ii++] = inTask;
+                tmp[ii++] = sg->secondaryIds[inTask];
             }
         }
 
@@ -655,7 +670,7 @@ bool onSameIsland(Laik_ActionSeq* as, Laik_Shmem_Comm* sg, int inputgroup, int o
     int rankI = laik_aseq_taskInGroup(as, inputgroup, 0,  chain_idx);
     int rankO = laik_aseq_taskInGroup(as, outputgroup, 0, chain_idx);
 
-    return sg->divsion[rankI] == sg->divsion[rankO];
+    return sg->locations[rankI] == sg->locations[rankO];
 
 }
 
