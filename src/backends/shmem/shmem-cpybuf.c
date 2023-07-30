@@ -50,7 +50,7 @@ void shmem_cpybuf_alloc(struct cpyBuf* buf, size_t size){
 }
 
 void shmem_cpybuf_delete(struct cpyBuf* buf){
-    shmem_free(buf->ptr);
+    if(buf->ptr) shmem_free(buf->ptr);
     buf->ptr = NULL;
     buf->size = 0;
     buf->request = 0;
@@ -59,4 +59,11 @@ void shmem_cpybuf_delete(struct cpyBuf* buf){
 void shmem_cpybuf_request(struct cpyBuf* buf, size_t size)
 {
     buf->request = size > buf->request ? size : buf->request;
+}
+
+void shmem_cpybuf_alloc_requested(struct cpyBuf* cpyBuf)
+{
+   if(cpyBuf->request > 0) 
+    shmem_cpybuf_alloc(cpyBuf, cpyBuf->request);
+   
 }

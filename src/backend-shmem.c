@@ -15,6 +15,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "backends/shmem/shmem-cpybuf.h"
 #include "backends/shmem/shmem-manager.h"
 #include "laik-internal.h"
 #include "laik.h"
@@ -192,7 +193,7 @@ void shmem_replace_MapPackAndSend(Laik_ActionSeq* as, Laik_Action* a, Laik_Trans
             laik_shmem_addOneCopyMap(as, aa->fromMapNo, shmid, aa->to_rank, rd, a->tid, chain_idx);
 
         }else {
-            request_CpyBuf(aa->count * data->elemsize);
+            shmem_cpybuf_request(&sd->cpybuf, aa->count * data->elemsize);
 
             laik_shmem_addTwoCopyMap(as, aa->range, aa->fromMapNo, aa->count, aa->to_rank, rd, a->tid, chain_idx);
         }
@@ -253,17 +254,15 @@ void shmem_replace_MapGroupReduce(Laik_ActionSeq* as, Laik_Action* a, Laik_Data*
 void laik_shmem_secondary_cleanup(Laik_Inst_Data* idata, Laik_ActionSeq* as)
 {   
     laik_log(1, "Shared Memory Backend Cleanup");
+    Laik_Shmem_Data* sd = idata->backend_data;
+    shmem_cpybuf_delete(&sd->cpybuf);
     shmem_manager_cleanup();
 
     // call next layer for cleanup
     laik_next_cleanup(idata, as);
    
 }
-//https://graphics.stanford.edu/~seander/bithacks.html#IntegerMinOrMaxS
-static int max(int x , int y)
-{
-    return x ^ ((x ^ y) & -(x < y));
-}
+
 
 void laik_shmem_secondary_prepare(Laik_Inst_Data* idata, Laik_ActionSeq *as)
 {
@@ -359,7 +358,7 @@ void laik_shmem_secondary_prepare(Laik_Inst_Data* idata, Laik_ActionSeq *as)
 
         
     }
-    createBuffer();
+    shmem_cpybuf_alloc_requested(&sd->cpybuf);
     laik_aseq_activateNewActions(as);
     laik_log_ActionSeqIfChanged(changed, as, "After shmem prepare");
 }

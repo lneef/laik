@@ -19,6 +19,7 @@
 #ifndef SHMEM_H
 #define SHMEM_H
 
+#include "backends/shmem/shmem-cpybuf.h"
 #include "laik/core.h"
 #include<laik-internal.h>
 #include<stddef.h>
@@ -70,6 +71,9 @@ typedef struct _Laik_Shmem_Comm
     // rank numbers of the processes in this subgroup
     int *primaryRanks;
 
+    // shmids of headers of ranks in the location
+    int* headershmids;
+
 }Laik_Shmem_Comm;
 
 typedef struct _Laik_Shmem_Data
@@ -77,10 +81,18 @@ typedef struct _Laik_Shmem_Data
     // number of processes per shared memory island
     int ranksPerIslands;
 
+    //chosen copy scheme
     int copyScheme;
 
+    //shmid of header
+    int headerShmid;
+
     //chosen copy scheme
-    int (*send)(void*, int, int, int);
+    int (*send)(void*, int, int, int, struct _Laik_Shmem_Data*);
+
+    struct commHeader* shmp;
+
+    struct cpyBuf cpybuf;
 
     
 }Laik_Shmem_Data;
@@ -120,11 +132,6 @@ int shmem_RecvReduce(char* buf, int count, int sender, Laik_Type* type, Laik_Red
 //------------------------------------------------------------------------------
 // copy buffer management and subgroup handling
 
-void cleanupBuffer();
-
-void createBuffer();
-
-void request_CpyBuf(size_t size);
 
 int shmem_init_comm(Laik_Shmem_Comm *sg, Laik_Group *g, Laik_Inst_Data *idata, int rank, int size);
 
