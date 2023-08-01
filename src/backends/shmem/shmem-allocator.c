@@ -3,6 +3,7 @@
 #include "laik.h"
 #include "shmem.h"
 
+#include <assert.h>
 #include <stddef.h>
 #include <sys/cdefs.h>
 #include <sys/shm.h>
@@ -68,7 +69,10 @@ void shmem_free(void* ptr)
     void* start = ((char*) ptr) - PAD(HEADER_SIZE, HEADER_PAD);
     int shmid;
     if(get_shmid_and_destroy(start, &shmid) != SHMEM_SUCCESS)
+    {
         laik_panic("def_shmem_free couldn't find the given shared memory segment");
+        assert(0);
+    }
     
     if (shmdt(start) == -1)
         laik_panic("def_shmem_free couldn't detach from the given pointer");

@@ -87,6 +87,9 @@ typedef struct _Laik_Shmem_Data
     //shmid of header
     int headerShmid;
 
+    //if affinity is taken into account
+    bool affinity;
+
     //chosen copy scheme
     int (*send)(void*, int, int, int, struct _Laik_Shmem_Data*);
 
@@ -115,15 +118,15 @@ int shmem_finalize();
 //------------------------------------------------------------------------------
 // peer to peer communication actions
 
-int shmem_send(void *buffer, int count, int datatype, int recipient,  Laik_Inst_Data* idata, Laik_Group* g);
+int shmem_send(void *buffer, int count, int datatype, int recipient,  Laik_Inst_Data* idata);
 
 int shmem_recv(void *buffer, int count,int sender, Laik_Data* data, Laik_Inst_Data* idata, Laik_Group* g, Laik_ReductionOperation redOp);
 
-int shmem_sendMap(Laik_Mapping* map, int receiver, int shmid, Laik_Inst_Data* idata, Laik_Group* g);
+int shmem_sendMap(Laik_Mapping* map, int receiver, int shmid, Laik_Inst_Data* idata);
 
 int shmem_recvMap(Laik_Mapping* map, Laik_Range* range, int count, int sender,  Laik_Inst_Data* idata, Laik_Group* g);
 
-int shmem_PackSend(Laik_Mapping* map, Laik_Range range, int count, int receiver,  Laik_Inst_Data* idata, Laik_Group* g);
+int shmem_PackSend(Laik_Mapping* map, Laik_Range range, int count, int receiver,  Laik_Inst_Data* idata);
 
 int shmem_RecvUnpack(Laik_Mapping* map, Laik_Range* range, int count, int sender, Laik_Inst_Data* idata, Laik_Group* g);
 

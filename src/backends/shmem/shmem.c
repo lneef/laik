@@ -17,15 +17,16 @@
  */
 
 
+#define _GNU_SOURCE
+#include <sched.h>
+
 #include "shmem.h"
 #include "backends/shmem/shmem-cpybuf.h"
 #include "backends/shmem/shmem-manager.h"
 #include "laik.h"
-#include "laik/backend.h"
-#include "laik/core.h"
-#include "laik/space.h"
 #include "shmem-allocator.h"
 #include "laik-internal.h"
+
 
 #include <assert.h>
 #include <complex.h>
@@ -43,17 +44,21 @@
 #include <signal.h>
 #include <stdatomic.h>
 #include <unistd.h>
+#include <sys/sysinfo.h>
 
 #define COPY_BUF_SIZE 1024 * 1024
 #define SHM_KEY 0x123
 #define MAX_WAITTIME 1
 #define SHM_RESIZE_KEY 0x246
 
+
 struct shmInitSeg
 {
     atomic_int rank;
     atomic_int colour;
     bool didInit;
+    atomic_int procs[];
+
 };
 
 
@@ -74,6 +79,140 @@ static int createMetaInfoSeg(Laik_Shmem_Data* sd)
     };
 
     return SHMEM_SUCCESS;
+}
+
+static void shmem_init_sync(int rank, int size, Laik_Inst_Data* idata, Laik_Group* g)
+{
+    if(rank == 0)
+    {
+        for(int i = 1; i<size; ++i)
+        {   
+            int barrier;
+            RECV_INTS(&barrier, 1, i, idata, g);
+        }
+    }else {
+        
+        SEND_INTS(&g->myid, 1, 0, idata, g);
+    }
+}
+
+static int shmem_split_location(int rank, int size, Laik_Inst_Data* idata, int shmAddr, Laik_Shmem_Comm* sg, Laik_Group* g, bool* creator)
+{
+    bool created = false;
+    struct shmInitSeg* shmp;
+    Laik_Shmem_Data* sd = idata->backend_data;
+
+    bool affinity = sd->affinity;
+
+    int mask;
+    if(rank == 0)
+    {
+        for(int i = 1; i < size; ++i)
+        {
+            SEND_INTS(&g->myid, 1, i, idata, g);
+        }
+        mask = g->myid;
+
+    }else {
+        RECV_INTS(&mask, 1, 0, idata, g);
+    }
+
+    //get number of configured processes
+    int num_cpus = CPU_ALLOC_SIZE(get_nprocs_conf());
+    int segment_size =  sizeof(struct shmInitSeg);
+    segment_size += affinity ? sizeof(atomic_int) * size : 0;
+
+    int address = shmAddr + mask;
+    int shmid = shmget(address, segment_size, IPC_EXCL | 0644 | IPC_CREAT);
+    if (shmid == -1)
+    {
+
+        shmid = shmget(address, segment_size, 0644);
+        
+        if (shmid == -1)
+        {
+            laik_panic("Init failed");
+            return SHMEM_SHMGET_FAILED;
+        }
+
+        // Attach to the segment to get a pointer to it.
+        shmp = shmat(shmid, NULL, 0);
+
+        if (shmp == (void *)-1)
+            return SHMEM_SHMAT_FAILED;
+
+        // register for barrier
+        shmem_init_sync(rank, size, idata, g);
+
+        // receive info that all processes have reached barrier
+        shmem_init_sync(rank, size, idata, g);
+
+        if(!affinity) sg -> location = atomic_load(&shmp->colour);
+
+    }
+    else
+    {
+        created = true;
+        // Master initialization
+        
+        shmp = shmat(shmid, NULL, 0);
+        if (shmp == (void *)-1)
+            return SHMEM_SHMAT_FAILED;
+
+        if(affinity)
+        {
+            for(int i = 0; i < size; ++i)
+                atomic_init(&shmp->procs[i], 0);
+        }else {
+            atomic_init(&shmp->colour, g->myid);
+            sg->location = g->myid;
+        }
+        
+        // register for barrier
+        shmem_init_sync(rank, size, idata, g);
+
+        // receive info that all processes have reached barrier
+        shmem_init_sync(rank, size, idata, g);
+        // global id in laik as identifier for shared memory domain
+    }
+
+    if(affinity)
+    {
+        int pid = getpid();
+        atomic_init(&shmp->procs[rank], pid);
+
+        shmem_init_sync(rank, size, idata, g);
+
+        cpu_set_t* mine = CPU_ALLOC(num_cpus);
+        cpu_set_t* comp = CPU_ALLOC(num_cpus);
+
+        CPU_ZERO_S(num_cpus, comp);
+
+        sched_getaffinity(0, num_cpus, mine);
+
+        for(int i = 0; i < size; ++i)
+        {
+            if(shmp->procs[i] <= 0) continue;
+
+            // compare cpu_set of given pid unitl an equal on is found
+            int pid = atomic_load(&shmp->procs[rank]);
+            sched_getaffinity(pid, num_cpus, comp);
+            if(CPU_EQUAL_S(num_cpus, mine, comp))
+            {
+                sg->location = i;
+                break;
+            }
+
+        }
+
+        CPU_FREE(mine);
+        CPU_FREE(comp);
+    }
+
+    shmdt(shmp);
+
+    *creator = created;
+    return shmid;
 }
 
 int shmem_location(Laik_Inst_Data* idata, Laik_Group* g)
@@ -112,8 +251,6 @@ int shmem_2cpy_send(void *buffer, int count, int datatype, int recipient, Laik_S
 
 int shmem_1cpy_send(void *buffer, int count, int datatype, int recipient, Laik_Shmem_Data* sd)
 {
-    (void) datatype;
-
     int bufShmid, offset;
     if(get_shmid(buffer, &bufShmid, &offset) == SHMEM_SEGMENT_NOT_FOUND){
         return shmem_2cpy_send(buffer, count, datatype, recipient, sd);
@@ -134,7 +271,6 @@ int shmem_recv(void *buffer, int count,int sender, Laik_Data* data, Laik_Inst_Da
 {
     int shmid;
     Laik_Shmem_Comm* sg = shmem_comm(idata, g);
-    //RECV_INTS(&shmid, 1, sg->primaryRanks[sender], idata, g);
     shmid = sg->headershmids[sender];
   
     // Attach to the segment to get a pointer to it.
@@ -178,23 +314,19 @@ int shmem_recv(void *buffer, int count,int sender, Laik_Data* data, Laik_Inst_Da
     return SHMEM_SUCCESS;
 }
 
-int shmem_sendMap(Laik_Mapping* map, int receiver, int shmid, Laik_Inst_Data* idata, Laik_Group* g)
+int shmem_sendMap(Laik_Mapping* map, int receiver, int shmid, Laik_Inst_Data* idata)
 {
     Laik_Shmem_Data* sd = idata->backend_data;
-    //SEND_INTS(&headerShmid, 1, sg->primaryRanks[receiver], idata, g);
     struct commHeader* shmp = sd->shmp;
-
     shmp->spec = MAP;
     shmp->shmid = shmid;
     shmp->range = map->allocatedRange;
     shmp->receiver = receiver;
-    while(shmp->receiver != -1)
-    {
-    }
+    
     return SHMEM_SUCCESS;   
 }
 
-int shmem_PackSend(Laik_Mapping* map, Laik_Range range, int count, int receiver,  Laik_Inst_Data* idata, Laik_Group* g)
+int shmem_PackSend(Laik_Mapping* map, Laik_Range range, int count, int receiver,  Laik_Inst_Data* idata)
 {   
     Laik_Shmem_Data* sd = idata->backend_data;
     shmem_cpybuf_alloc(&sd->cpybuf, count * map->data->elemsize);
@@ -253,7 +385,6 @@ int shmem_recvMap(Laik_Mapping* map, Laik_Range* range, int count, int sender,  
 {
     int shmid, ret = SHMEM_FAILURE;
     Laik_Shmem_Comm* sg = shmem_comm(idata, g);
-    //RECV_INTS(&shmid, 1, sg->primaryRanks[sender], idata, g);
     shmid = sg->headershmids[sender];
     struct commHeader* shmp = shmem_manager_attach(shmid, 0);
     while(shmp->receiver != sg->myid)
@@ -278,7 +409,6 @@ int shmem_RecvUnpack(Laik_Mapping *map, Laik_Range *range, int count, int sender
 {
     int shmid;    
     Laik_Shmem_Comm* sg = shmem_comm(idata, g);
-    //RECV_INTS(&shmid, 1, sg->primaryRanks[sender], idata, g);
     shmid = sg->headershmids[sender];
     struct commHeader* shmp = shmem_manager_attach(shmid, 0);
     while(shmp->receiver != sg->myid)
@@ -298,7 +428,6 @@ int shmem_RecvReduce(char* buf, int count, int sender, Laik_Type* type, Laik_Red
 {
     int shmid;
     Laik_Shmem_Comm* sg = shmem_comm(idata, g);
-    //RECV_INTS(&shmid, 1, sg->primaryRanks[sender], idata, g);
     shmid = sg->headershmids[sender];
     struct commHeader* shmp = shmem_manager_attach(shmid, 0);
 
@@ -318,10 +447,9 @@ int shmem_RecvReduce(char* buf, int count, int sender, Laik_Type* type, Laik_Red
 
 }
 
-int shmem_send(void* buffer, int count, int datatype, int receiver, Laik_Inst_Data* idata, Laik_Group* g)
+int shmem_send(void* buffer, int count, int datatype, int receiver, Laik_Inst_Data* idata)
 {
     Laik_Shmem_Data* sd = (Laik_Shmem_Data*) idata->backend_data;
-    //SEND_INTS(&headerShmid, 1, sg->primaryRanks[receiver], idata, g);
     return sd->send(buffer, count, datatype, receiver, sd);
 }
 
@@ -364,88 +492,12 @@ int shmem_finalize()
     return SHMEM_SUCCESS;
 }
 
-static int pair(int colour, int rank)
-{
-    int tmp = (colour + rank) * (colour + rank + 1);
-    return tmp/2 + colour + 1;
-}
-
 int shmem_update_comm(Laik_Shmem_Comm* sg, Laik_Group* g, Laik_Inst_Data* idata, int size, int shmAddr, int rank)
 {
     Laik_Shmem_Data* sd = (Laik_Shmem_Data*) idata->backend_data;
     bool created = false;
-    struct shmInitSeg* shmp;
 
-    int mask;
-    if(rank == 0)
-    {
-        for(int i = 1; i < size; ++i)
-        {
-            SEND_INTS(&g->myid, 1, i, idata, g);
-        }
-        mask = g->myid;
-
-    }else {
-        RECV_INTS(&mask, 1, 0, idata, g);
-    }
-
-
-    int address = shmAddr + pair(mask, 0);
-    int shmid = shmget(address, sizeof(struct shmInitSeg), IPC_EXCL | 0644 | IPC_CREAT);
-    if (shmid == -1)
-    {
-
-        shmid = shmget(address, sizeof(struct shmInitSeg), 0644);
-        
-        if (shmid == -1)
-        {
-            laik_panic("Init failed");
-            return SHMEM_SHMGET_FAILED;
-        }
-
-        // Attach to the segment to get a pointer to it.
-        shmp = shmat(shmid, NULL, 0);
-        if (shmp == (void *)-1)
-            return SHMEM_SHMAT_FAILED;
-        
-        if(rank == 0)
-        {
-            for(int i = 1; i<size; ++i)
-            {   
-                int barrier;
-                RECV_INTS(&barrier, 1, i, idata, g);
-            }
-        }else {
-            SEND_INTS(&g->myid, 1, 0, idata, g);
-        }
-
-        sg->location = atomic_load(&shmp->colour);
-
-    }
-    else
-    {
-        created = true;
-        // Master initialization
-        sg->location = g->myid;
-        
-        shmp = shmat(shmid, NULL, 0);
-        if (shmp == (void *)-1)
-            return SHMEM_SHMAT_FAILED;
-
-        atomic_init(&shmp->colour, g->myid);
-        if(rank == 0)
-        {
-            for(int i = 1; i<size; ++i)
-            {   
-                int barrier;
-                RECV_INTS(&barrier, 1, i, idata, g);
-            }
-        }else {
-            SEND_INTS(&g->myid, 1, 0, idata, g);
-        }
-
-        // global id in laik as identifier for shared memory domain
-    }    
+    int shmid = shmem_split_location(rank, size, idata, shmAddr, sg, g, &created);
 
     // Get the colours of each process at master, calculate the groups and send each process their group.
     if (rank == 0)
@@ -481,6 +533,7 @@ int shmem_update_comm(Laik_Shmem_Comm* sg, Laik_Group* g, Laik_Inst_Data* idata,
         for (int i = 1; i < size; i++)
         {   
             RECV_INTS(&colour, 1, i, idata, g);
+            laik_log(2, "%d, %d", colour, i);
 
             if(tmpColours[colour] == -1)
                 tmpColours[colour] = newColour++;
@@ -494,7 +547,7 @@ int shmem_update_comm(Laik_Shmem_Comm* sg, Laik_Group* g, Laik_Inst_Data* idata,
             int new_rank = groupSizes[sg->locations[i]]++;
             
             // if we reached <perIsland> ranks <colour> if mappes to a higher number
-            if(groupSizes[sg->locations[i]] >= sd->ranksPerIslands) 
+            if(groupSizes[sg->locations[i]] == sd->ranksPerIslands) 
                 tmpColours[colour] = newColour++;
             
             sg->secondaryIds[i] = new_rank;
@@ -502,10 +555,6 @@ int shmem_update_comm(Laik_Shmem_Comm* sg, Laik_Group* g, Laik_Inst_Data* idata,
             SEND_INTS(&new_rank, 1, i, idata, g);
             
         }
-
-
-        if (shmdt(shmp) == -1)
-            return SHMEM_SHMDT_FAILED;
 
         if (created && shmctl(shmid, IPC_RMID, 0) == -1)
             return SHMEM_SHMCTL_FAILED;
@@ -532,9 +581,6 @@ int shmem_update_comm(Laik_Shmem_Comm* sg, Laik_Group* g, Laik_Inst_Data* idata,
         RECV_INTS(&sg->location, 1, 0, idata, g);
 
         RECV_INTS(&sg->myid, 1, 0, idata, g);
-
-        if (shmdt(shmp) == -1)
-            return SHMEM_SHMDT_FAILED;
 
         if (created && shmctl(shmid, IPC_RMID, 0) == -1)
             return SHMEM_SHMCTL_FAILED;
@@ -573,8 +619,6 @@ int shmem_update_comm(Laik_Shmem_Comm* sg, Laik_Group* g, Laik_Inst_Data* idata,
             if(j == sg->myid) continue;
             SEND_INTS(&sd->headerShmid, 1, sg->primaryRanks[j], idata, g);
         }
-
-
     }
 
     return SHMEM_SUCCESS;
@@ -588,11 +632,24 @@ int shmem_init_comm(Laik_Shmem_Comm *sg, Laik_Group *g, Laik_Inst_Data *idata, i
 
 static char* saveptrR;
 static char* saveptrC;
+static char* saveptrA;
+
 int shmem_secondary_init(Laik_Shmem_Comm* sg, Laik_Inst_Data* idata, Laik_Group* world, int primarySize, int rank)
 {
     signal(SIGINT, deleteOpenShmSegs);
     Laik_Shmem_Data* sd = malloc(sizeof(Laik_Shmem_Data));
-    char *token, *copyToken;
+    char *token, *copyToken, *affinityToken;
+
+    if(!saveptrA)
+    {
+        char *affinity = getenv("LAIK_SHMEM_AFFINITY");
+        affinityToken = affinity == NULL ? NULL : strtok_r(affinity, ",", &saveptrR);
+    }else {
+        affinityToken = strtok_r(NULL, ",", &saveptrA);
+    }
+
+    sd -> affinity = affinityToken ? atoi(affinityToken) == 1 : false;
+
     if(!saveptrR)
     {
         char *envRanks = getenv("LAIK_SHMEM_RANKS_PER_ISLANDS");

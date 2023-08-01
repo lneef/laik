@@ -167,7 +167,7 @@ void laik_shmem_exec_GroupBroadCast(Laik_Action* a, Laik_ActionSeq* as, Laik_Tra
 
 void laik_shmem_exec_GroupReduce(Laik_Action * a, Laik_ActionSeq* as, Laik_TransitionContext* tc, Laik_Inst_Data* idata, Laik_Group* g);
 
-void laik_shmem_exec_GetMapAndCopy(Laik_Action* a, Laik_TransitionContext* tc, Laik_Inst_Data* idata, Laik_Group* g);
+void laik_shmem_exec_GetMapAndCopy(Laik_Action* a, Laik_TransitionContext* tc, Laik_Inst_Data* idata);
 
 void laik_shmem_exec_ReceiveMap(Laik_Action* a, Laik_TransitionContext* tc, Laik_Inst_Data* idata, Laik_Group* g);
 

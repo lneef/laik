@@ -63,21 +63,6 @@ static Laik_Backend shmem_backend = {
     .allocator = shmem_allocator,
 };
 
-//----------------------------------------------------------------------------
-// error helpers
-
-static void laik_shmem_panic(int err)
-{
-    char str[SHMEM_MAX_ERROR_STRING];
-
-    assert(err != SHMEM_SUCCESS);
-    if (shmem_error_string(err, str) != SHMEM_SUCCESS)
-        laik_panic("SHMEM backend: Unknown SHMEM error!");
-    else
-        laik_log(LAIK_LL_Panic, "SHMEM backend: SHMEM error '%s'", str);
-    exit(1);
-}
-
 //-----------------------------------------------------------------------------
 // resizing and group update
 
@@ -421,7 +406,7 @@ void laik_shmem_secondary_exec(Laik_Inst_Data* idata, Laik_ActionSeq *as)
         case LAIK_AT_ShmemGetMapAndCopy:
         {
             assert(a->chain_idx == index);
-            laik_shmem_exec_GetMapAndCopy(a, tc, idata, g);
+            laik_shmem_exec_GetMapAndCopy(a, tc, idata);
             break;
         }
         case LAIK_AT_ShmemTwoCopyMap:
@@ -429,7 +414,7 @@ void laik_shmem_secondary_exec(Laik_Inst_Data* idata, Laik_ActionSeq *as)
             assert(a->chain_idx == index);
             Laik_A_ShmemTwoCopyMap* aa = (Laik_A_ShmemTwoCopyMap*) a;
             Laik_Mapping* m = &tc->fromList->map[aa->mapNo];
-            shmem_PackSend(m, *aa->range, aa->count, aa->to_rank, idata, g);
+            shmem_PackSend(m, *aa->range, aa->count, aa->to_rank, idata);
             break;
         }
         case LAIK_AT_ShmemOneCopyMap:
@@ -437,7 +422,7 @@ void laik_shmem_secondary_exec(Laik_Inst_Data* idata, Laik_ActionSeq *as)
             assert(a->chain_idx == index);
             Laik_A_ShmemOneCopyMap* aa = (Laik_A_ShmemOneCopyMap*) a;
             Laik_Mapping* m = &tc->fromList->map[aa->mapNo];
-            shmem_sendMap(m, aa->to_rank, aa->shmid, idata, g);
+            shmem_sendMap(m, aa->to_rank, aa->shmid, idata);
             break;
         }
         case LAIK_AT_ShmemReceiveMap:
