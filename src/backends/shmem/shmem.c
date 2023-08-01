@@ -322,6 +322,10 @@ int shmem_sendMap(Laik_Mapping* map, int receiver, int shmid, Laik_Inst_Data* id
     shmp->shmid = shmid;
     shmp->range = map->allocatedRange;
     shmp->receiver = receiver;
+
+    while(shmp->receiver != -1)
+    {
+    }
     
     return SHMEM_SUCCESS;   
 }

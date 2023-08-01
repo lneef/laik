@@ -215,7 +215,7 @@ void shmem_replace_MapGroupReduce(Laik_ActionSeq* as, Laik_Action* a, Laik_Data*
     char* fromBuf = rank == primaryI ? shmem_manager_alloc(ba -> count * data -> elemsize) : NULL;
     char* toBuf = rank == primaryO ? shmem_manager_alloc(ba -> count * data->elemsize) : NULL;
 
-    bool fullReduce = onSameIsland(as, sg, ba->inputGroup, ba->outputGroup,chain_idx) && false;
+    bool fullReduce = onSameIsland(as, sg, ba->inputGroup, ba->outputGroup, chain_idx);
     if(memberI)
     {
         laik_shmem_addMapGroupReduce(as, ba, rd, primaryI, fromBuf, chain_idx);
