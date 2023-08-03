@@ -36,7 +36,7 @@
 // just using offset function
 
 // helper for laik_layout_copy/pack_gen: lexicographical traversal
-static
+
 bool next_lex(Laik_Range* range, Laik_Index* idx)
 {
     idx->i[0]++;
