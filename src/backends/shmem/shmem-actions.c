@@ -1,6 +1,8 @@
 
 #include "shmem-actions.h"
 #include "backends/shmem/shmem-manager.h"
+#include "laik/action-internal.h"
+#include "laik/space.h"
 #include "shmem.h"
 
 #include <laik-internal.h>
@@ -231,18 +233,28 @@ void laik_shmem_exec_MapGroupReduce(Laik_ActionSeq* as, Laik_Action* a, Laik_Tra
     
     if(aa->primary == sg->myid)
     {
-        map->layout->pack(map, &tmp, &(tmp.from), aa->buf, aa->count * data->elemsize);
+        int i = 0;
         int count = laik_aseq_groupCount(as, aa->subgroup, chain_idx);
-        for(int i = 1; i < count; ++i)
+        if(laik_aseq_isInGroup(as, aa->subgroup, sg->myid, a->chain_idx)) 
+        {
+            map->layout->pack(map, &tmp, &(tmp.from), aa->buf, aa->count * data->elemsize);
+        }else {
+            // will exist, otherwise full reduce is 0
+            int task =laik_aseq_taskInGroup(as, aa->subgroup, 0, a->chain_idx);
+            shmem_recv(aa->buf, aa->count, task, data, idata, g, LAIK_RO_None);
+            ++i;
+        }
+    
+        for(; i < count; ++i)
         {   
             int task = laik_aseq_taskInGroup(as, aa->subgroup, i, chain_idx);
+            if(task == sg->myid) continue;
             shmem_RecvReduce(aa->buf, aa->count, task, data->type, aa->redOp, idata, g);
 
         }
     }
     else{
-        int task = laik_aseq_taskInGroup(as, aa->subgroup, 0, chain_idx);
-        shmem_PackSend(map, *aa->range, aa->count, task, idata);
+        shmem_PackSend(map, *aa->range, aa->count, aa->primary, idata);
     }
     
 }

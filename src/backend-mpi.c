@@ -416,7 +416,6 @@ Laik_Instance *laik_init_mpi(int *argc, char ***argv)
 
     inst->inst_data->send = sendIntegersMPI;
     inst->inst_data->recv = recvIntegersMPI;
-    laik_init_secondaries(inst, world, rank, size);
 
     mpi_instance = inst;
     return inst;

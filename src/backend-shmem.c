@@ -135,15 +135,13 @@ static void shmem_replace_groupReduce(Laik_ActionSeq* as, Laik_BackendAction* ba
 
 
     char* reduceBuf = ba->fromBuf;
-
+    bool fullReduce = onSameIsland(as, sg, ba->inputGroup, ba->outputGroup, chain_idx);
     if(memberI && inSize > 1)
     {
         laik_shmem_addGroupReduce(as, ba, rd, reduceBuf, chain_idx, primaryI);
 
     }
     ++rd;
-
-    bool fullReduce = onSameIsland(as, sg, ba->inputGroup, ba->outputGroup, chain_idx);
 
     if((rank == primaryI && memberI) || (rank == primaryO && memberO))
     {   
@@ -216,17 +214,20 @@ void shmem_replace_MapGroupReduce(Laik_ActionSeq* as, Laik_Action* a, Laik_Data*
     char* toBuf = rank == primaryO ? shmem_manager_alloc(ba -> count * data->elemsize) : NULL;
 
     bool fullReduce = onSameIsland(as, sg, ba->inputGroup, ba->outputGroup, chain_idx);
-    if(memberI)
+    int primary = fullReduce && primaryO != -1 ? primaryO : primaryI;
+
+    if(fullReduce && rank == primaryO)
     {
-        laik_shmem_addMapGroupReduce(as, ba, rd, primaryI, fromBuf, chain_idx);
+        laik_shmem_addMapGroupReduce(as, ba, rd, primary, toBuf, chain_idx);
+    }
+    else if(memberI)
+    {
+        laik_shmem_addMapGroupReduce(as, ba, rd, primary, fromBuf, chain_idx);
     }
 
-    if(rank == primaryI || rank == primaryO)
+    if(!fullReduce && (rank == primaryI || rank == primaryO))
     {   
-        if(!fullReduce)
-            laik_aseq_addGroupReduce(as, rd + 1, ba->inputGroup, ba->outputGroup, fromBuf, toBuf, ba->count, ba -> redOp);
-        else
-            laik_shmem_addShmemCopyToBuf(as, rd + 1, fromBuf, toBuf, ba->count, primaryI, primaryO, ba->h.tid, chain_idx);
+        laik_aseq_addGroupReduce(as, rd + 1, ba->inputGroup, ba->outputGroup, fromBuf, toBuf, ba->count, ba -> redOp);
     }
 
     if(memberO)

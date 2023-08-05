@@ -62,8 +62,9 @@ struct shmInitSeg
 };
 
 
-void deleteOpenShmSegs(__attribute_maybe_unused__ int sig)
+void deleteOpenShmSegs(int sig)
 {
+    (void) sig;
     deleteAllocatedSegments();
 }
 
@@ -342,6 +343,7 @@ int shmem_PackSend(Laik_Mapping* map, Laik_Range range, int count, int receiver,
     shmp->spec = PACK;
     map->layout->pack(map, &range, &from, sd->cpybuf.ptr, count * map->data->elemsize);
     shmp->receiver = receiver;
+    shmp->count = count;
     
 
     while(shmp->receiver != -1)
