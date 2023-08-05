@@ -448,7 +448,6 @@ uint64_t freeMap(Laik_Mapping* m, Laik_Data* d, Laik_SwitchStat* ss)
     uint64_t freed = 0;
     //m->layout->free(m, m->layoutSection);
     if (m->allocator) {
-            laik_log(2, "%p", (void*)m->header);
 
         m->allocator->free(m->data, m);
         laik_switchstat_free(ss, m->capacity);
@@ -545,7 +544,6 @@ void laik_allocateMap(Laik_Mapping* m, Laik_SwitchStat* ss, Laik_Partitioning* t
     // use the allocator of the mapping
     size_t size = m->layout->alloc(m, m->mapNo, toP);
     laik_switchstat_malloc(ss, size);
-    size_t offset = m->layout->offset(m->layout, m->mapNo, &m->requiredRange.from);
     char* start = m->header + m->layout->header_size;
 
     if (!start) {
@@ -1509,7 +1507,6 @@ Laik_Mapping* laik_get_map_1d(Laik_Data* d, int n, void** base, uint64_t* count)
     if (base) *base = m->base;
     if (count) *count = m->count;
 
-    laik_log(2, "%p", (void*)m->base);
     laik_log_flush(0);
     return m;
 }
@@ -1672,7 +1669,7 @@ void* def_malloc(Laik_Data* d, Laik_Layout* l, Laik_Range* range, Laik_Partition
     // not used in this implementation of interface
     (void)l;
     (void)p;
-    size_t size = laik_range_size(range) * d->elemsize;
+    size_t size = laik_range_size(range) * d->elemsize + l->header_size;
 
     return malloc(size);
 }

@@ -318,6 +318,9 @@ int recvIntegersMPI(int *buf, int count, int sender, Laik_Inst_Data* idata, Laik
     return MPI_Recv(buf, count, MPI_INTEGER, sender, 0, gd->comm, &st);
 }
 
+double begin;
+double end;
+
 //----------------------------------------------------------------------------
 // backend interface implementation: initialization
 Laik_Instance *laik_init_mpi(int *argc, char ***argv)
@@ -418,6 +421,9 @@ Laik_Instance *laik_init_mpi(int *argc, char ***argv)
     inst->inst_data->recv = recvIntegersMPI;
     laik_init_secondaries(inst, world, rank, size);
 
+    MPI_Barrier(MPI_COMM_WORLD);
+    begin = MPI_Wtime();
+
     mpi_instance = inst;
     return inst;
 }
@@ -435,6 +441,7 @@ static MPIGroupData *mpiGroupData(Laik_Group *g)
 static
 void laik_mpi_finalize(Laik_Inst_Data* idata, Laik_Instance* inst)
 {
+    end = MPI_Wtime();
     assert(inst == mpi_instance);
 
     if (mpiData(mpi_instance)->didInit)
@@ -445,6 +452,9 @@ void laik_mpi_finalize(Laik_Inst_Data* idata, Laik_Instance* inst)
     }
 
     laik_next_finalize(idata, inst);
+
+    printf("dur:%f", end - begin);
+
 
 }
 

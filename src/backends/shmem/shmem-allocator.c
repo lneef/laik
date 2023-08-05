@@ -196,7 +196,7 @@ void* shmem_alloc(size_t size, int* shimdPtr)
 
     ptr -> shmid = shmid;
     ptr -> size = size + header_size;
-    ptr -> ref = false;
+    atomic_init(&ptr->z, false);
 
     return ((char*)ptr) + header_size;
 }

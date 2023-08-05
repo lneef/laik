@@ -17,7 +17,6 @@
  */
 
 
-#include "laik/core.h"
 #define _GNU_SOURCE
 #include <sched.h>
 
@@ -46,6 +45,8 @@
 #include <stdatomic.h>
 #include <unistd.h>
 #include <sys/sysinfo.h>
+#include <linux/membarrier.h>
+#include <sys/syscall.h>
 
 #define COPY_BUF_SIZE 1024 * 1024
 #define SHM_KEY 0x123
@@ -414,7 +415,7 @@ int shmem_zeroCopySyncRecv(int sender, Laik_Inst_Data* idata, Laik_Group* g)
 {
     Laik_Shmem_Comm* sg = shmem_comm(idata, g);
     int shmid = sg->headershmids[sender];
-
+    syscall(SYS_membarrier, MEMBARRIER_CMD_REGISTER_GLOBAL_EXPEDITED, 0, 0);
     struct commHeader* shmp = shmem_manager_attach(shmid, 0);
     while(shmp->receiver != sg->myid)
     {
@@ -422,21 +423,21 @@ int shmem_zeroCopySyncRecv(int sender, Laik_Inst_Data* idata, Laik_Group* g)
     }
 
     shmp->receiver = -1;
-
+    syscall(SYS_membarrier, MEMBARRIER_CMD_GLOBAL_EXPEDITED, 0, 0);
     return SHMEM_SUCCESS;
 }
 
 int shmem_zeroCopySyncSend(int receiver, Laik_Inst_Data* idata)
 {
     Laik_Shmem_Data* sd = idata->backend_data;
-
+    syscall(SYS_membarrier, MEMBARRIER_CMD_REGISTER_GLOBAL_EXPEDITED, 0, 0);
     struct commHeader* shmp = sd->shmp;
     shmp->receiver = receiver;
 
     while(shmp->receiver != -1)
     {
     }
-
+    syscall(SYS_membarrier, MEMBARRIER_CMD_GLOBAL_EXPEDITED, 0, 0);
 
     return SHMEM_SUCCESS;
 }
@@ -658,6 +659,8 @@ int shmem_update_comm(Laik_Shmem_Comm* sg, Laik_Group* g, Laik_Inst_Data* idata,
             SEND_INTS(&sd->headerShmid, 1, sg->primaryRanks[j], idata, g);
         }
     }
+
+    sg->primaryRanks[sg->myid] = rank; 
 
     return SHMEM_SUCCESS;
     

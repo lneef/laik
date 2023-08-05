@@ -233,7 +233,6 @@ void copy_lex(Laik_Range* range,
             fromOff, fromPtr, toOff, toPtr);
     }
 
-    laik_log(2, "%lu, %lu, %lu, %d", count.i[1], fromLayoutEntry->hd->stride[1], toLayoutEntry->hd->stride[1], getpid());
     for(int64_t i3 = 0; i3 < count.i[2]; i3++) {
         char *fromPtr2 = fromPtr;
         char *toPtr2 = toPtr;

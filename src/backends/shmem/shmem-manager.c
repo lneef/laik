@@ -115,6 +115,11 @@ void* def_shmem_malloc(Laik_Data* d, Laik_Layout* ll, Laik_Range* range, Laik_Pa
         if(sg->locations[rl->trange[i].task] != sg->location) continue;
         laik_range_expand(&alloc_range, &rl->trange[i].range);
     }
+    if(laik_range_isEqual(range, &alloc_range))
+    {
+        size_t size = laik_range_size(range) * d->elemsize;
+        return shmem_alloc(size, &shmid);
+    }
     size_t size = laik_range_size(&alloc_range) * d ->elemsize;
     size += ll->header_size;
     *range = alloc_range;
@@ -124,18 +129,18 @@ void* def_shmem_malloc(Laik_Data* d, Laik_Layout* ll, Laik_Range* range, Laik_Pa
 
 bool allow_reuse(Laik_Data* data, Laik_Mapping* m)
 {
+    if(!zero_copy) return true;
     Laik_Inst_Data* idata = data->backend_data;
     Laik_Shmem_Comm* sg = data->activePartitioning->group->backend_data[idata->index];
 
     Laik_Partitioning* p = m->data->activePartitioning;
     Laik_RangeList* rl = laik_partitioning_allranges(p);
-    int ii = 0;
+
     bool allow = false;
     for(unsigned i = 0 ; i < rl->count; ++i)
     {
         if(sg->locations[rl->trange[i].task] == sg->location) continue;
         allow &= laik_range_within_range(&rl->trange[i].range, &m->allocatedRange);
-        ++ii;
 
     }
 

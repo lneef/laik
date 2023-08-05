@@ -197,11 +197,15 @@ void shmem_replace_MapRecvAndUnpack(Laik_ActionSeq* as, Laik_Action* a, Laik_Tra
 {
     Laik_A_MapRecvAndUnpack* aa = (Laik_A_MapRecvAndUnpack*) a;
 
-    Laik_Mapping* m = &tc->toList->map[aa->toMapNo];     
-    if(is_shmem_allocator(m->allocator) && shmem_manager_zeroCopy(m->header))
+    Laik_Mapping* m = &tc->toList->map[aa->toMapNo];
+    if(tc->toList)
     {
-        laik_shmem_addZeroCopySync(as, LAIK_AT_ShmemZeroCopySyncRecv, aa->from_rank, 3 * a->round, a->tid, chain_idx);
-        return;
+        if(is_shmem_allocator(m->allocator) && shmem_manager_zeroCopy(m->header))
+        {
+
+            laik_shmem_addZeroCopySync(as, LAIK_AT_ShmemZeroCopySyncRecv, aa->from_rank, 3 * a->round, a->tid, chain_idx);
+            return;
+        }
     }
 
     laik_shmem_addReceiveMap(as, aa->range, aa->toMapNo, 3 * a->round, a->tid, aa->count, aa->from_rank, chain_idx);
