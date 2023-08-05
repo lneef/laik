@@ -18,10 +18,14 @@
 #define SHMEM_ALLOCATOR_H
 
 #include "laik.h"
+#include <stdatomic.h>
+#include <stdint.h>
 
 struct shmHeader
 {
     int size;
+    atomic_int ref;
+    atomic_bool z;
     int shmid;
 };
 
@@ -33,6 +37,10 @@ void shmem_free(void* ptr);
 void deleteAllocatedSegments();
 
 void* shmem_alloc(size_t size, int* shimdPtr);
+
+void* shmem_key_alloc(int key, size_t size, int* shimdPtr);
+
+void shmem_free_zero_copy(Laik_Data* data, struct shmHeader* sh);
 
 void cleanup(void);
 

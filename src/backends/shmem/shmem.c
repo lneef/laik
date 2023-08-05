@@ -17,6 +17,7 @@
  */
 
 
+#include "laik/core.h"
 #define _GNU_SOURCE
 #include <sched.h>
 
@@ -408,6 +409,39 @@ int shmem_recvMap(Laik_Mapping* map, Laik_Range* range, int count, int sender,  
 
     return ret;
 }
+
+int shmem_zeroCopySyncRecv(int sender, Laik_Inst_Data* idata, Laik_Group* g)
+{
+    Laik_Shmem_Comm* sg = shmem_comm(idata, g);
+    int shmid = sg->headershmids[sender];
+
+    struct commHeader* shmp = shmem_manager_attach(shmid, 0);
+    while(shmp->receiver != sg->myid)
+    {
+
+    }
+
+    shmp->receiver = -1;
+
+    return SHMEM_SUCCESS;
+}
+
+int shmem_zeroCopySyncSend(int receiver, Laik_Inst_Data* idata)
+{
+    Laik_Shmem_Data* sd = idata->backend_data;
+
+    struct commHeader* shmp = sd->shmp;
+    shmp->receiver = receiver;
+
+    while(shmp->receiver != -1)
+    {
+    }
+
+
+    return SHMEM_SUCCESS;
+}
+
+
 
 int shmem_RecvUnpack(Laik_Mapping *map, Laik_Range *range, int count, int sender,  Laik_Inst_Data* idata, Laik_Group* g)
 {

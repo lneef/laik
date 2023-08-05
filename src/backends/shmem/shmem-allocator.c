@@ -1,10 +1,16 @@
 
 #include "backends/shmem/shmem-allocator.h"
 #include "laik.h"
+#include "laik/core.h"
+#include "laik/data.h"
 #include "shmem.h"
 
 #include <assert.h>
+#include <errno.h>
+#include <stdatomic.h>
+#include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <sys/cdefs.h>
 #include <sys/shm.h>
 #include <stdlib.h>
@@ -51,6 +57,27 @@ static int get_shmid_and_destroy(void *ptr, int *shmid)
     return SHMEM_SEGMENT_NOT_FOUND;
 }
 
+static int release(int shmid)
+{
+    struct shmSeg* next;
+    struct shmSeg* current = &shmList;
+
+    while (current->next) 
+    {   
+        next = current->next;
+        if(shmid == next->shmid)
+        {
+            current->next = next->next;
+            free(next);
+            return SHMEM_SUCCESS;
+        }
+
+        current = current->next;
+    }
+
+    return SHMEM_SEGMENT_NOT_FOUND;
+}
+
 void deleteAllocatedSegments(){
 
     struct shmSeg *l = shmList.next;
@@ -70,15 +97,15 @@ void shmem_free(void* ptr)
     int shmid;
     if(get_shmid_and_destroy(start, &shmid) != SHMEM_SUCCESS)
     {
-        laik_panic("def_shmem_free couldn't find the given shared memory segment");
+        laik_panic("shmem_free couldn't find the given shared memory segment");
         assert(0);
     }
     
     if (shmdt(start) == -1)
-        laik_panic("def_shmem_free couldn't detach from the given pointer");
+        laik_panic("shmem_free couldn't detach from the given pointer");
 
     if (shmctl(shmid, IPC_RMID, 0) == -1)
-        laik_panic("def_shmem_free couldn't destroy the shared memory segment");
+        laik_panic("shmem_free couldn't destroy the shared memory segment");
 }
 
 int get_shmid(void *ptr, int *shmid, int *offset)
@@ -96,11 +123,55 @@ int get_shmid(void *ptr, int *shmid, int *offset)
     return SHMEM_SEGMENT_NOT_FOUND;
 }
 
-void* shmem_alloc(size_t size, int* shimdPtr)
+static int shmem_shmid(int key, size_t size, int perm)
 {
+    return shmget(key, size, perm);
+}
+
+// rank 
+void* shmem_key_alloc(int key, size_t size, int* shimdPtr)
+{
+    struct shmSeg* seg = malloc(sizeof(struct shmSeg));
     size_t header_size = PAD(HEADER_SIZE, HEADER_PAD);
     size_t alloc_size = size + header_size;
-    int shmid = shmget(IPC_PRIVATE, alloc_size, 0644 | IPC_CREAT | IPC_EXCL);
+
+    int shmid = shmem_shmid(key, alloc_size, IPC_CREAT | IPC_EXCL | 0644);
+    if (shmid == -1)
+    {   
+        shmid = shmem_shmid(key, size, 0644);
+    }
+
+    // second shimd failed
+    if(shmid == -1)
+    {
+        laik_panic(strerror(errno));
+    }
+    
+    // Attach to the segment to get a pointer to it.
+    struct shmHeader *ptr = shmat(shmid, NULL, 0);
+    if (ptr == (void *)-1)
+    {
+        laik_panic("def_shmem_malloc couldn't attach to the shared memory segment");
+        return NULL;
+    }
+
+    seg -> ptr = ptr;
+    seg -> size = alloc_size;
+    seg -> shmid = shmid;
+    register_shmSeg(seg);
+
+    *shimdPtr = shmid;
+
+    ptr -> shmid = shmid;
+    ptr -> size = alloc_size;
+    atomic_init(&ptr->z, true);
+
+    return ((char*)ptr) + header_size;
+}
+
+void* shmem_alloc(size_t size, int* shimdPtr)
+{
+    int shmid = shmem_shmid(IPC_PRIVATE, size, IPC_CREAT | IPC_EXCL | 0644);
     if (shmid == -1)
     {   
         laik_panic("def_shmem_malloc couldn't create the shared memory segment: shmid == -1");
@@ -114,19 +185,47 @@ void* shmem_alloc(size_t size, int* shimdPtr)
         laik_panic("def_shmem_malloc couldn't attach to the shared memory segment");
         return NULL;
     }
-
+    size_t header_size = PAD(HEADER_SIZE, HEADER_PAD);
     struct shmSeg* seg = malloc(sizeof(struct shmSeg));
     seg -> ptr = ptr;
-    seg -> size = alloc_size;
+    seg -> size = size + header_size;
     seg -> shmid = shmid;
     register_shmSeg(seg);
 
     *shimdPtr = shmid;
 
     ptr -> shmid = shmid;
-    ptr -> size = alloc_size;
+    ptr -> size = size + header_size;
+    ptr -> ref = false;
 
     return ((char*)ptr) + header_size;
+}
+
+void shmem_free_zero_copy(Laik_Data* data, struct shmHeader* sh)
+{
+    Laik_Group* g = data->activePartitioning->group;
+    Laik_Inst_Data* idata = data->backend_data;
+    Laik_Shmem_Comm* sg = g->backend_data[idata->index];
+    int myid = sg->myid;
+    int shmid = sh->shmid;
+
+    if(myid == 0)
+    {
+        struct shmid_ds sd;
+
+        do {
+            shmctl(shmid, IPC_STAT, &sd);
+        }while (sd.shm_nattch != 1);
+
+        shmdt(sh);
+
+        shmctl(shmid, IPC_RMID, NULL);
+        
+    }else {
+        shmdt(sh);
+    }
+
+    release(shmid);
 }
 
 

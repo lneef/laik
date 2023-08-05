@@ -17,6 +17,8 @@
 #ifndef SHMEM_MANAGER_H
 #define SHMEM_MANAGER_H
 
+#include "laik/data.h"
+#include "laik/space.h"
 #include <stddef.h>
 #include <laik.h>
 
@@ -34,8 +36,10 @@ bool is_shmem_allocator(Laik_Allocator* allocator);
 
 int shmem_manager_shmid(char* ptr);
 
-void* def_shmem_malloc(Laik_Data* d, size_t size);
+bool shmem_manager_zeroCopy(char* ptr);
 
-void def_shmem_free(Laik_Data* d, void* ptr);
+void* def_shmem_malloc(Laik_Data* d, Laik_Layout* ll, Laik_Range* range, Laik_Partitioning* p);
+
+void def_shmem_free(Laik_Data* d, Laik_Mapping* m);
 
 #endif

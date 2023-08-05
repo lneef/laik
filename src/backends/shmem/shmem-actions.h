@@ -34,6 +34,8 @@
 #define LAIK_AT_ShmemReceiveMap (LAIK_AT_Backend + 46)
 #define LAIK_AT_ShmemMapGroupReduce (LAIK_AT_Backend + 47)
 #define LAIK_AT_ShmemMapBroadcast (LAIK_AT_Backend + 48)
+#define LAIK_AT_ShmemZeroCopySyncSend (LAIK_AT_Backend + 49)
+#define LAIK_AT_ShmemZeroCopySyncRecv (LAIK_AT_Backend + 50)
 
 #pragma pack(push, 1)
 typedef struct{
@@ -83,21 +85,11 @@ typedef struct
     int sender;
 } Laik_A_ShmemCopyToBuf;
 
-typedef struct 
-{
-    Laik_Action h;
-    char *buf;
-    int count;
-} Laik_A_ShmemBroadcast;
-
 typedef struct
 {
     Laik_Action h;
-    char* frombuf;
-    char* buf;
-    int count;
-    Laik_ReductionOperation redOp;
-} Laik_A_ShmemReduce;
+    int peer;
+} Laik_A_ShmemZeroCopySync;
 
 typedef struct 
 {
@@ -159,6 +151,9 @@ void laik_shmem_addGetMapAndCopy(Laik_ActionSeq* as, Laik_Range* range, int mapN
 void laik_shmem_addTwoCopyMap(Laik_ActionSeq* as, Laik_Range* range, int mapNo, int count, int receiver, int round, int tid, int chain_idx);
 
 void laik_shmem_addOneCopyMap(Laik_ActionSeq* as, int mapNo, int shmid, int receiver, int round, int tid, int chain_idx);
+
+void laik_shmem_addZeroCopySync(Laik_ActionSeq* as, int type, int receiver, int round, int tid, int chain_idx);
+
 
 //---------------------------------------------------------------------
 // execute secondary specific action

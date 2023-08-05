@@ -132,6 +132,10 @@ int shmem_RecvUnpack(Laik_Mapping* map, Laik_Range* range, int count, int sender
 
 int shmem_RecvReduce(char* buf, int count, int sender, Laik_Type* type, Laik_ReductionOperation redOp,  Laik_Inst_Data* idata, Laik_Group* g);
 
+int shmem_zeroCopySyncSend(int receiver, Laik_Inst_Data* idata);
+
+int shmem_zeroCopySyncRecv(int sender, Laik_Inst_Data* idata, Laik_Group* g);
+
 //------------------------------------------------------------------------------
 // copy buffer management and subgroup handling
 

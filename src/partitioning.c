@@ -26,6 +26,8 @@
 
 
 #include "laik-internal.h"
+#include "laik/core.h"
+#include "laik/debug.h"
 
 // for string.h to declare strdup
 #define __STDC_WANT_LIB_EXT2__ 1
@@ -711,6 +713,7 @@ Laik_TaskRange* laik_my_range_2d(Laik_Partitioning* p, int n,
     assert(p->space->dims == 2);
     Laik_TaskRange* ts = laik_my_range(p, n);
     const Laik_Range* s = ts ? laik_taskrange_get_range(ts) : 0;
+
     if (x1) *x1 = s ? s->from.i[0] : 0;
     if (x2) *x2 = s ? s->to.i[0] : 0;
     if (y1) *y1 = s ? s->from.i[1] : 0;

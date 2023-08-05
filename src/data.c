@@ -18,6 +18,7 @@
 #include "laik-internal.h"
 #include "laik/core.h"
 #include "laik/data.h"
+#include "laik/debug.h"
 #include "laik/space-internal.h"
 #include "laik/space.h"
 
@@ -29,7 +30,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include "backends/shmem/shmem-manager.h"
 
 // provided allocators
 Laik_Allocator *laik_allocator_def = 0;
@@ -162,15 +162,20 @@ static int data_id = 0;
 
 // get backend specific allocator
 // currently lowest backend with custom allocator defines allocator for data container
-static Laik_Allocator* allocator(Laik_Instance* inst)
+static Laik_Allocator* allocator(Laik_Instance* inst, Laik_Data* d)
 {
     Laik_Allocator* (*create)();
     create = inst->backend->allocator;
+    Laik_Inst_Data* idata = NULL;
     for(Laik_Inst_Data* c = inst->inst_data; c->next != NULL; c = c->next)
     {
         create = c->next_backend->allocator ? c->next_backend->allocator : create;
+        idata = c->next;
     }
     assert(laik_allocator_def);
+
+    // set backend data of data container to inst data of backend that does allocation
+    d->backend_data = idata;
     return create ? create() : laik_allocator_def;
 }
 
@@ -194,7 +199,7 @@ Laik_Data* laik_new_data(Laik_Space* space, Laik_Type* type)
     d->backend_data = 0;
     d->activePartitioning = 0;
     d->activeMappings = 0;
-    d->allocator = allocator(space->inst); // malloc/free + reuse if possible
+    d->allocator = allocator(space->inst, d); // malloc/free + reuse if possible
     assert(d->allocator);
     d->layout_factory = laik_new_layout_lex; // by default, use lex layouts
     d->stat = laik_newSwitchStat();
@@ -408,7 +413,6 @@ Laik_MappingList* prepareMaps(Laik_Data* d, Laik_Partitioning* p)
             laik_log(1, "  using provided memory (%lld bytes at %p with layout %s)",
                      (unsigned long long int) d->map0_size, d->map0_base,
                      layout->describe(m->layout));
-            m->layout->init(m, NULL, m->layoutSection);
         }
     }
 
@@ -424,7 +428,7 @@ uint64_t freeMap(Laik_Mapping* m, Laik_Data* d, Laik_SwitchStat* ss)
 {
     assert(d == m->data);
 
-    if (!m->start) {
+    if (!m->header) {
         laik_log(1, "free map for data '%s' mapNo %d: nothing was allocated\n",
                  m->data->name, m->mapNo);
         return 0;
@@ -444,7 +448,9 @@ uint64_t freeMap(Laik_Mapping* m, Laik_Data* d, Laik_SwitchStat* ss)
     uint64_t freed = 0;
     //m->layout->free(m, m->layoutSection);
     if (m->allocator) {
-        m->allocator->free(m->data, m->header);
+            laik_log(2, "%p", (void*)m->header);
+
+        m->allocator->free(m->data, m);
         laik_switchstat_free(ss, m->capacity);
         freed = m->capacity;
         
@@ -511,10 +517,9 @@ void laik_map_set_allocation(Laik_Mapping* m,
     assert(size >=  m->count * m->data->elemsize);
 
     // allocated size/count is same as size/count of required range
-    m->allocCount = m->count;
-    m->allocatedRange = m->requiredRange;
+    m->allocCount = laik_range_size(&m->allocatedRange);
 
-    m->base = start;
+    m->base = start + m->layout->offset(m->layout, m->mapNo, &m->requiredRange.from) * m->data->elemsize;
     m->start = start;
     m->capacity = size;
 
@@ -524,7 +529,7 @@ void laik_map_set_allocation(Laik_Mapping* m,
 
 
 
-void laik_allocateMap(Laik_Mapping* m, Laik_SwitchStat* ss)
+void laik_allocateMap(Laik_Mapping* m, Laik_SwitchStat* ss, Laik_Partitioning* toP)
 {
     // should only be called if not embedded in another mapping
     assert(m->baseMapping == 0);
@@ -534,17 +539,14 @@ void laik_allocateMap(Laik_Mapping* m, Laik_SwitchStat* ss)
     Laik_Data* d = m->data;
 
     // number of bytes to allocate: no space around required indexes
-    uint64_t size = m->count * d->elemsize;
-    laik_switchstat_malloc(ss, size);
+    //uint64_t size = m->count * d->elemsize;
+    //laik_switchstat_malloc(ss, size);
 
     // use the allocator of the mapping
-    Laik_Allocator* a = m->allocator;
-    assert(a != 0);
-    assert(a->malloc != 0);
-    size_t hd_size = m->layout->header_size;
-    m->header = (a->malloc)(d, size + hd_size);
-    m->layout->init(m, m->header, m->layoutSection);
-    char* start = m->header + hd_size;
+    size_t size = m->layout->alloc(m, m->mapNo, toP);
+    laik_switchstat_malloc(ss, size);
+    size_t offset = m->layout->offset(m->layout, m->mapNo, &m->requiredRange.from);
+    char* start = m->header + m->layout->header_size;
 
     if (!start) {
         laik_log(LAIK_LL_Panic,
@@ -554,7 +556,7 @@ void laik_allocateMap(Laik_Mapping* m, Laik_SwitchStat* ss)
         exit(1); // not actually needed, laik_log never returns
     }
 
-    laik_map_set_allocation(m, start, size, a);
+    laik_map_set_allocation(m, start, size, m->allocator);
 
     laik_log(1, "allocateMap: for '%s'/%d: %llu x %d (%llu B) at %p",
              d->name, m->mapNo, (unsigned long long int) m->count, d->elemsize,
@@ -619,7 +621,7 @@ void    copyMaps(Laik_Transition* t,
             uint64_t toOff = laik_offset(toMap->layout, toMap->layoutSection, &(s->from));
             assert(fromMap->start + fromOff * d->elemsize ==
                    toMap->start   + toOff * d->elemsize);
-
+            
             laik_log(1, " mapping reused, no copy done");
             continue;
         }
@@ -678,6 +680,7 @@ void checkMapReuse(Laik_MappingList* toList, Laik_MappingList* fromList)
     // reuse-check implemented in layout interface and same layout type?
     if ((fromList->layout->reuse == 0) ||
         (fromList->layout->reuse != toList->layout->reuse)) return;
+    
 
     for(int i = 0; i < toList->count; i++) {
         Laik_Mapping* toMap = &(toList->map[i]);
@@ -688,6 +691,7 @@ void checkMapReuse(Laik_MappingList* toList, Laik_MappingList* fromList)
             fromMap = &(fromList->map[sNo]);
             if (fromMap->base == 0) continue;
             if (fromMap->reusedFor >= 0) continue; // only reuse once
+            if (fromMap->allocator->check && ! fromMap->allocator->check(fromMap->data, fromMap)) continue;
 
             // does new mapping fit into old?
             bool reuse = (toList->layout->reuse)(toList->layout, i, fromList->layout, sNo);
@@ -772,7 +776,7 @@ void initMaps(Laik_Transition* t,
 }
 
 static
-void allocateMappings(Laik_MappingList* toList, Laik_SwitchStat* ss)
+void allocateMappings(Laik_MappingList* toList, Laik_SwitchStat* ss, Laik_Partitioning* toP)
 {
     for(int i = 0; i < toList->count; i++) {
         Laik_Mapping* map = &(toList->map[i]);
@@ -784,7 +788,7 @@ void allocateMappings(Laik_MappingList* toList, Laik_SwitchStat* ss)
         // to be able to allocate memory, an allocator must be set
         assert(map->allocator != 0);
 
-        laik_allocateMap(map, ss);
+        laik_allocateMap(map, ss, toP);
     }
 }
 
@@ -810,6 +814,7 @@ static
 void doTransition(Laik_Data* d, Laik_Transition* t, Laik_ActionSeq* as,
                   Laik_MappingList* fromList, Laik_MappingList* toList)
 {
+    Laik_Partitioning* toP = t->toPartitioning;
     if (d->stat) {
         d->stat->switches++;
         if (!t || (t->actionCount == 0))
@@ -835,7 +840,7 @@ void doTransition(Laik_Data* d, Laik_Transition* t, Laik_ActionSeq* as,
     checkMapReuse(toList, fromList);
 
     // allocate space for mappings for which reuse is not possible
-    allocateMappings(toList, d->stat);
+    allocateMappings(toList, d->stat, toP);
 
     bool doASeqCleanup = false;
     if (as) {
@@ -1175,7 +1180,7 @@ void laik_reservation_alloc(Laik_Reservation* res)
         m->layout = (data->layout_factory)(1, range);
         m->layoutSection = 0;
 
-        laik_allocateMap(m, data->stat);
+        laik_allocateMap(m, data->stat, res->entry->p);
 
         if (laik_log_begin(1)) {
             laik_log_append(" map [%d] ", m->mapNo);
@@ -1394,6 +1399,7 @@ Laik_Partitioning* laik_switchto_new_partitioning(Laik_Data* d, Laik_Group* g,
     Laik_Partitioning* p;
     p = laik_new_partitioning(pr, g, d->space, 0);
 
+
     laik_log(1, "switch data '%s' to new partitioning '%s'",
              d->name, p->name);
     laik_switchto_partitioning(d, p, flow, redOp);
@@ -1424,7 +1430,9 @@ void laik_fill_double(Laik_Data* d, double v)
     laik_get_map_1d(d, 0, (void**) &base, &count);
     assert(laik_my_rangecount(d->activePartitioning) == 1);
     for (i = 0; i < count; i++)
+    {
         base[i] = v;
+    }
 }
 
 // for a local index (1d/2d/3d), return offset into memory mapping
@@ -1500,6 +1508,9 @@ Laik_Mapping* laik_get_map_1d(Laik_Data* d, int n, void** base, uint64_t* count)
 
     if (base) *base = m->base;
     if (count) *count = m->count;
+
+    laik_log(2, "%p", (void*)m->base);
+    laik_log_flush(0);
     return m;
 }
 
@@ -1656,23 +1667,27 @@ void laik_free(Laik_Data* d)
 //
 
 // default malloc/free functions
-void* def_malloc(Laik_Data* d, size_t size)
+void* def_malloc(Laik_Data* d, Laik_Layout* l, Laik_Range* range, Laik_Partitioning* p)
 {
-    (void)d; // not used in this implementation of interface
+    // not used in this implementation of interface
+    (void)l;
+    (void)p;
+    size_t size = laik_range_size(range) * d->elemsize;
 
     return malloc(size);
 }
 
-void def_free(Laik_Data* d, void* ptr)
+void def_free(Laik_Data* d, Laik_Mapping* m)
 {
     (void)d; // not used in this implementation of interface
 
-    free(ptr);
+    free(m->header);
 }
 
 Laik_Allocator* laik_new_allocator(Laik_malloc_t malloc_func,
                                    Laik_free_t free_func,
-                                   Laik_realloc_t realloc_func)
+                                   Laik_realloc_t realloc_func, 
+                                   Laik_alloc_reuse check_reuse)
 {
     Laik_Allocator* a = malloc(sizeof(Laik_Allocator));
     if (!a) {
@@ -1684,6 +1699,7 @@ Laik_Allocator* laik_new_allocator(Laik_malloc_t malloc_func,
     a->malloc = malloc_func;
     a->free = free_func;
     a->realloc = realloc_func;
+    a->check = check_reuse;
     a->unmap = 0;   // no notification
 
     return a;
@@ -1706,7 +1722,7 @@ Laik_Allocator* laik_get_allocator(Laik_Data* d)
 // returns an allocator with default policy LAIK_MP_NewAllocOnRepartition
 Laik_Allocator* laik_new_allocator_def()
 {
-    Laik_Allocator* a = laik_new_allocator(def_malloc, def_free, 0);
+    Laik_Allocator* a = laik_new_allocator(def_malloc, def_free, 0, 0);
     
     a->policy = LAIK_MP_NewAllocOnRepartition;
 

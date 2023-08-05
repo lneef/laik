@@ -18,6 +18,7 @@
 #ifndef LAIK_DATA_INTERNAL_H
 #define LAIK_DATA_INTERNAL_H
 
+#include "laik/space.h"
 #include <laik.h>     // for Laik_Mapping, Laik_Range, Laik_Data, Laik_Switc...
 #include <stdbool.h>  // for bool
 #include <stdint.h>   // for uint64_t
@@ -171,6 +172,6 @@ void laik_type_init(void);
 Laik_MappingList* laik_mappinglist_new(Laik_Data* d, int n, Laik_Layout* l);
 
 // ensure that the mapping is backed by memory (called by backends)
-void laik_allocateMap(Laik_Mapping* m, Laik_SwitchStat *ss);
+void laik_allocateMap(Laik_Mapping* m, Laik_SwitchStat *ss, Laik_Partitioning* p);
 
 #endif // LAIK_DATA_INTERNAL_H

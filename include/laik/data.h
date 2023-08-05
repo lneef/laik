@@ -335,7 +335,7 @@ typedef unsigned int (*laik_layout_unpack_t)(
     Laik_Mapping* m, Laik_Range* r,
     Laik_Index* idx, char* buf, unsigned int size);
 
-typedef void (*laik_layout_init_t)(Laik_Mapping* m, char* header, int n);
+typedef size_t (*laik_layout_alloc_t)(Laik_Mapping* m, int n, Laik_Partitioning* p);
 
 // return string describing the layout (for debug output)
 typedef char* (*laik_layout_describe_t)(Laik_Layout*);
@@ -363,7 +363,7 @@ struct _Laik_Layout {
     laik_layout_unpack_t unpack;
     laik_layout_copy_t copy;
 
-    laik_layout_init_t init;
+    laik_layout_alloc_t alloc;
 };
 
 void laik_init_layout(Laik_Layout* l, int dims, int map_count, uint64_t count,
@@ -375,7 +375,7 @@ void laik_init_layout(Laik_Layout* l, int dims, int map_count, uint64_t count,
                       laik_layout_pack_t pack,
                       laik_layout_unpack_t unpack,
                       laik_layout_copy_t copy,
-                      laik_layout_init_t alloc);
+                      laik_layout_alloc_t alloc);
 
 // (slow) generic copy just using offset function from layout interface
 void laik_layout_copy_gen(Laik_Range* range,
@@ -411,9 +411,10 @@ typedef enum _Laik_MemoryPolicy {
 } Laik_MemoryPolicy;
 
 // allocator interface
-typedef void* (*Laik_malloc_t)(Laik_Data*, size_t);
-typedef void  (*Laik_free_t)(Laik_Data*, void*);
+typedef void* (*Laik_malloc_t)(Laik_Data*, Laik_Layout* l, Laik_Range* range, Laik_Partitioning* toP);
+typedef void  (*Laik_free_t)(Laik_Data*, Laik_Mapping*);
 typedef void* (*Laik_realloc_t)(Laik_Data*, void*, size_t);
+typedef bool (*Laik_alloc_reuse)(Laik_Data* data, Laik_Mapping*);
 
 typedef struct _Laik_Allocator Laik_Allocator;
 struct _Laik_Allocator {
@@ -425,6 +426,7 @@ struct _Laik_Allocator {
     Laik_malloc_t malloc;
     Laik_free_t free;
     Laik_realloc_t realloc;
+    Laik_alloc_reuse check;
 
     // notification to allocator that a part of the data is about to be
     // transfered by the communication backend and should be made consistent
@@ -432,7 +434,7 @@ struct _Laik_Allocator {
     void (*unmap)(Laik_Data* d, void* ptr, size_t length);
 };
 
-Laik_Allocator* laik_new_allocator(Laik_malloc_t, Laik_free_t, Laik_realloc_t);
+Laik_Allocator* laik_new_allocator(Laik_malloc_t, Laik_free_t, Laik_realloc_t, Laik_alloc_reuse);
 void laik_set_allocator(Laik_Data* d, Laik_Allocator* alloc);
 Laik_Allocator* laik_get_allocator(Laik_Data* d);
 // returns an allocator with default policy LAIK_MP_NewAllocOnRepartition

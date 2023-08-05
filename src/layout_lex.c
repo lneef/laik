@@ -20,14 +20,17 @@
 #include "laik/core.h"
 #include "laik/data.h"
 #include "laik/debug.h"
+#include "laik/space.h"
 
 #include <assert.h>
 #include <stdalign.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/cdefs.h>
+#include <unistd.h>
 
 
 // this file implements a layout providing lexicographical ordering (1d/2d/3d)
@@ -230,6 +233,7 @@ void copy_lex(Laik_Range* range,
             fromOff, fromPtr, toOff, toPtr);
     }
 
+    laik_log(2, "%lu, %lu, %lu, %d", count.i[1], fromLayoutEntry->hd->stride[1], toLayoutEntry->hd->stride[1], getpid());
     for(int64_t i3 = 0; i3 < count.i[2]; i3++) {
         char *fromPtr2 = fromPtr;
         char *toPtr2 = toPtr;
@@ -490,24 +494,53 @@ unsigned int unpack_lex(Laik_Mapping* m, Laik_Range* s,
     return count;
 }
 
-void laik_layout_init_lex(Laik_Mapping* m, char* header, int n)
+static void init_lex(Laik_Layout_Lex* ll, Lex_Entry* e, int dims, Laik_Range* range)
+{
+    ll->h.count -= e->hd->count;
+    e->hd->count = laik_range_size(range);
+    ll->h.count += e->hd->count;
+        
+    e->hd->stride[0] = 1;
+    e->hd->hd.size = PAD(sizeof(Lex_Memory_Header), 64);
+
+    if (dims > 1) {
+        e->hd->stride[1] = range->to.i[0] - range->from.i[0];
+        assert(range->from.i[1] < range->to.i[1]);
+    }
+    else
+        e->hd->stride[1] = 0; // invalid, not used
+
+    if (dims > 2) {
+        e->hd->stride[2] = e->hd->stride[1] * (range->to.i[1] - range->from.i[1]);
+        assert(range->from.i[2] < range->to.i[2]);
+    }
+    else
+        e->hd->stride[2] = 0; // invalid, not used
+
+     e->range = *range;
+}
+
+size_t alloc_lex(Laik_Mapping* m, int n, Laik_Partitioning* p)
 {
     Laik_Layout_Lex* ll = (Laik_Layout_Lex*)m->layout;
     Lex_Memory_Header* lold = ll->e[n].hd;
-    if(!header)
-    {
-        m->header = (char*)lold;
-        return;
-    }
+    
+    assert(m->allocator);
+    Laik_Allocator* a = m->allocator;
+    Laik_Range alloc_range = m->requiredRange;
+    char* ptr = a->malloc(m->data, m->layout, &alloc_range, p);
+    Lex_Memory_Header* hd = (Lex_Memory_Header*) ptr;
+    ll->e[n].hd = hd;
 
-    Lex_Memory_Header* hd = (Lex_Memory_Header*) header;
-    hd->count = lold->count;
-    memcpy(hd->stride, lold->stride, 3 * sizeof(uint64_t));
+    init_lex(ll, &ll->e[n], m->layout->dims, &alloc_range);
+
     strncpy(hd->hd.name, LEX_IDENTIFIER, 9);
     hd->hd.size = ll->h.header_size;
+    m->allocatedRange = alloc_range;
+    m->header = ptr;
 
-    free(ll->e[n].hd);
-    ll->e[n].hd = hd;
+    free(lold);
+    return laik_range_size(&alloc_range) * m->data->elemsize;
 }
 
 // create layout for lexicographical layout covering <n> ranges
@@ -529,7 +562,7 @@ Laik_Layout* laik_new_layout_lex(int n, Laik_Range* ranges)
                      pack_lex,
                      unpack_lex,
                      copy_lex,
-                     laik_layout_init_lex);
+                     alloc_lex);
 
     uint64_t count = 0;
     strncpy(l->h.name, LEX_IDENTIFIER, 9);
