@@ -83,13 +83,21 @@ typedef struct
     int sender;
 } Laik_A_ShmemCopyToBuf;
 
+typedef struct 
+{
+    Laik_Action h;
+    char *buf;
+    int count;
+} Laik_A_ShmemBroadcast;
+
 typedef struct
 {
     Laik_Action h;
+    char* frombuf;
     char* buf;
     int count;
     Laik_ReductionOperation redOp;
-} Laik_A_ShmemMapReduce;
+} Laik_A_ShmemReduce;
 
 typedef struct 
 {
