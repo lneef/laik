@@ -123,7 +123,8 @@ void* def_shmem_malloc(Laik_Data* d, Laik_Layout* ll, Laik_Range* range, Laik_Pa
     size_t size = laik_range_size(&alloc_range) * d ->elemsize;
     size += ll->header_size;
     *range = alloc_range;
-    void* ptr = shmem_key_alloc(KEY_OFFSET + current++, size, &shmid);
+    current += sg->location + 1;
+    void* ptr = shmem_key_alloc(KEY_OFFSET + current, size, &shmid);
     return ptr;
 }
 

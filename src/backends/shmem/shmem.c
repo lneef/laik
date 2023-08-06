@@ -238,7 +238,7 @@ int shmem_2cpy_send(void *buffer, int count, int datatype, int recipient, Laik_S
 {
     int size = datatype * count;
     shmem_cpybuf_alloc(&sd->cpybuf, size);
-    struct commHeader* shmp = sd->shmp;
+    volatile struct commHeader* shmp = sd->shmp;
     shmp->count = count;
     shmp->spec = PACK;
     shmp->shmid = sd->cpybuf.shmid;
@@ -276,7 +276,7 @@ int shmem_recv(void *buffer, int count,int sender, Laik_Data* data, Laik_Inst_Da
     shmid = sg->headershmids[sender];
   
     // Attach to the segment to get a pointer to it.
-    struct commHeader *shmp = shmem_manager_attach(shmid, 0);
+    volatile struct commHeader *shmp = shmem_manager_attach(shmid, 0);
 
     while (shmp->receiver != sg->myid)
     {
@@ -307,6 +307,7 @@ int shmem_recv(void *buffer, int count,int sender, Laik_Data* data, Laik_Inst_Da
         data->type->reduce(buffer, buffer, bufShmp, count, redOp);
     }
 
+
     shmp->receiver = -1;
 
     shmem_manager_detach((char*)shmp);
@@ -319,7 +320,7 @@ int shmem_recv(void *buffer, int count,int sender, Laik_Data* data, Laik_Inst_Da
 int shmem_sendMap(Laik_Mapping* map, int receiver, int shmid, Laik_Inst_Data* idata)
 {
     Laik_Shmem_Data* sd = idata->backend_data;
-    struct commHeader* shmp = sd->shmp;
+    volatile struct commHeader* shmp = sd->shmp;
     shmp->spec = MAP;
     shmp->shmid = shmid;
     shmp->range = map->allocatedRange;
@@ -338,13 +339,12 @@ int shmem_PackSend(Laik_Mapping* map, Laik_Range range, int count, int receiver,
     shmem_cpybuf_alloc(&sd->cpybuf, count * map->data->elemsize);
 
     Laik_Index from = range.from;
-    struct commHeader* shmp = sd->shmp;
+    volatile struct commHeader* shmp = sd->shmp;
     //pack makes changes to range
     shmp->shmid = sd->cpybuf.shmid;
     shmp->spec = PACK;
     map->layout->pack(map, &range, &from, sd->cpybuf.ptr, count * map->data->elemsize);
     shmp->receiver = receiver;
-    
 
     while(shmp->receiver != -1)
     {
@@ -414,31 +414,51 @@ int shmem_recvMap(Laik_Mapping* map, Laik_Range* range, int count, int sender,  
 int shmem_zeroCopySyncRecv(int sender, Laik_Inst_Data* idata, Laik_Group* g)
 {
     Laik_Shmem_Comm* sg = shmem_comm(idata, g);
-    int shmid = sg->headershmids[sender];
-    syscall(SYS_membarrier, MEMBARRIER_CMD_REGISTER_GLOBAL_EXPEDITED, 0, 0);
+    int shmid = sg->headershmids[0];
+    //syscall(SYS_membarrier, MEMBARRIER_CMD_REGISTER_GLOBAL_EXPEDITED, 0, 0);
     struct commHeader* shmp = shmem_manager_attach(shmid, 0);
-    while(shmp->receiver != sg->myid)
+    while(shmp->receiver != sg->size)
     {
 
     }
 
-    shmp->receiver = -1;
-    syscall(SYS_membarrier, MEMBARRIER_CMD_GLOBAL_EXPEDITED, 0, 0);
+    atomic_fetch_add(&shmp->barrrier, 1);
+
+    while(atomic_load(&shmp->barrrier) != sg->size)
+    {
+
+    }
+    //syscall(SYS_membarrier, MEMBARRIER_CMD_GLOBAL_EXPEDITED, 0, 0);
+
+    while(shmp->receiver  != -1)
+    {
+
+    }
+
+
     return SHMEM_SUCCESS;
 }
 
-int shmem_zeroCopySyncSend(int receiver, Laik_Inst_Data* idata)
+int shmem_zeroCopySyncSend(int receiver, Laik_Inst_Data* idata, Laik_Group* g)
 {
+    (void) receiver;
     Laik_Shmem_Data* sd = idata->backend_data;
-    syscall(SYS_membarrier, MEMBARRIER_CMD_REGISTER_GLOBAL_EXPEDITED, 0, 0);
+    Laik_Shmem_Comm* sg = shmem_comm(idata, g);
+    //syscall(SYS_membarrier, MEMBARRIER_CMD_REGISTER_GLOBAL_EXPEDITED, 0, 0);
     struct commHeader* shmp = sd->shmp;
-    shmp->receiver = receiver;
 
-    while(shmp->receiver != -1)
+    atomic_init(&shmp->barrrier, 1);
+    shmp->receiver = sg->size;
+
+    while(atomic_load(&shmp->barrrier) != sg->size)
     {
     }
-    syscall(SYS_membarrier, MEMBARRIER_CMD_GLOBAL_EXPEDITED, 0, 0);
 
+
+    //syscall(SYS_membarrier, MEMBARRIER_CMD_GLOBAL_EXPEDITED, 0, 0);
+
+    
+    shmp->receiver = -1;
     return SHMEM_SUCCESS;
 }
 
@@ -468,12 +488,13 @@ int shmem_RecvReduce(char* buf, int count, int sender, Laik_Type* type, Laik_Red
     int shmid;
     Laik_Shmem_Comm* sg = shmem_comm(idata, g);
     shmid = sg->headershmids[sender];
-    struct commHeader* shmp = shmem_manager_attach(shmid, 0);
+    volatile struct commHeader* shmp = shmem_manager_attach(shmid, 0);
 
     while(shmp->receiver != sg->myid)
     {
     } 
     assert(shmp->spec == PACK);
+
     char* ptr = shmem_manager_attach(shmp->shmid, 0);
 
     assert(type->reduce);
