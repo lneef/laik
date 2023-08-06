@@ -17,6 +17,7 @@
  */
 
 
+#include "laik/core.h"
 #define _GNU_SOURCE
 #include <sched.h>
 
@@ -97,14 +98,55 @@ static void shmem_init_sync(int rank, int size, Laik_Inst_Data* idata, Laik_Grou
     }
 }
 
+static void shmem_parse_affinity_mask(Laik_Shmem_Data* sd)
+{
+    const char* override = getenv("LAIK_SHMEM_AFFINITY");
+    if(!override) return;
+    unsigned size = CPU_ALLOC_SIZE(get_nprocs_conf());
+    cpu_set_t* mask = CPU_ALLOC(size);
+    cpu_set_t* mine = CPU_ALLOC(size);
+    cpu_set_t* zero = CPU_ALLOC(size);
+    CPU_ZERO_S(size, zero);
+    sched_getaffinity(0, size, mine);
+
+    int i = 0;
+    int set = 0;
+    while(override[i])
+    {
+        CPU_ZERO_S(size,mask);
+        for(int j = 0; override[i] && override[i] !=',';  ++i, ++j)
+        {
+            if(override[i] == '1')
+                CPU_SET_S(j, size, mask);
+        }
+
+        CPU_AND_S(size, mask, mine, mask);
+
+        if(!CPU_EQUAL_S(size, mask, zero))
+        {
+            sd->affinity = set;
+            CPU_FREE(mine);
+            CPU_FREE(zero);
+            CPU_FREE(mask);
+            return;
+        }
+
+        if(!override)
+            break;
+        
+        ++i;
+    }
+
+    laik_panic("No fitting mask");
+}
+
 static int shmem_split_location(int rank, int size, Laik_Inst_Data* idata, int shmAddr, Laik_Shmem_Comm* sg, Laik_Group* g, bool* creator)
 {
     bool created = false;
     struct shmInitSeg* shmp;
     Laik_Shmem_Data* sd = idata->backend_data;
 
-    bool affinity = sd->affinity;
-
+    if(sd->affinity && sd->set == -1) shmem_parse_affinity_mask(sd);
     int mask;
     if(rank == 0)
     {
@@ -119,9 +161,8 @@ static int shmem_split_location(int rank, int size, Laik_Inst_Data* idata, int s
     }
 
     //get number of configured processes
-    int num_cpus = CPU_ALLOC_SIZE(get_nprocs_conf());
     int segment_size =  sizeof(struct shmInitSeg);
-    segment_size += affinity ? sizeof(atomic_int) * size : 0;
+    segment_size +=  sd->affinity ? sizeof(atomic_int) * size : 0;
 
     int address = shmAddr + mask;
     int shmid = shmget(address, segment_size, IPC_EXCL | 0644 | IPC_CREAT);
@@ -148,7 +189,7 @@ static int shmem_split_location(int rank, int size, Laik_Inst_Data* idata, int s
         // receive info that all processes have reached barrier
         shmem_init_sync(rank, size, idata, g);
 
-        if(!affinity) sg -> location = atomic_load(&shmp->colour);
+        if(!sd->affinity) sg -> location = atomic_load(&shmp->colour);
 
     }
     else
@@ -160,10 +201,10 @@ static int shmem_split_location(int rank, int size, Laik_Inst_Data* idata, int s
         if (shmp == (void *)-1)
             return SHMEM_SHMAT_FAILED;
 
-        if(affinity)
+        if(sd->affinity)
         {
             for(int i = 0; i < size; ++i)
-                atomic_init(&shmp->procs[i], 0);
+                atomic_init(&shmp->procs[i], -1);
         }else {
             atomic_init(&shmp->colour, g->myid);
             sg->location = g->myid;
@@ -177,37 +218,24 @@ static int shmem_split_location(int rank, int size, Laik_Inst_Data* idata, int s
         // global id in laik as identifier for shared memory domain
     }
 
-    if(affinity)
+    if(sd->affinity)
     {
-        int pid = getpid();
-        atomic_init(&shmp->procs[rank], pid);
+        atomic_init(&shmp->procs[rank], sd->affinity);
 
         shmem_init_sync(rank, size, idata, g);
-
-        cpu_set_t* mine = CPU_ALLOC(num_cpus);
-        cpu_set_t* comp = CPU_ALLOC(num_cpus);
-
-        CPU_ZERO_S(num_cpus, comp);
-
-        sched_getaffinity(0, num_cpus, mine);
-
         for(int i = 0; i < size; ++i)
         {
             if(shmp->procs[i] <= 0) continue;
 
             // compare cpu_set of given pid unitl an equal on is found
-            int pid = atomic_load(&shmp->procs[rank]);
-            sched_getaffinity(pid, num_cpus, comp);
-            if(CPU_EQUAL_S(num_cpus, mine, comp))
+            int set = atomic_load(&shmp->procs[rank]);
+            if(set == sd->affinity)
             {
                 sg->location = i;
                 break;
             }
 
         }
-
-        CPU_FREE(mine);
-        CPU_FREE(comp);
     }
 
     shmdt(shmp);
@@ -697,6 +725,8 @@ int shmem_secondary_init(Laik_Shmem_Comm* sg, Laik_Inst_Data* idata, Laik_Group*
 
     sd->ranksPerIslands = perIsland;
     idata->backend_data = sd;
+
+    sd->set = -1;
 
     //create meta info seg and cpybuf for this backend instance
     createMetaInfoSeg(sd);

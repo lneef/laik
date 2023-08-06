@@ -90,6 +90,9 @@ typedef struct _Laik_Shmem_Data
     //if affinity is taken into account
     bool affinity;
 
+    //cpu set
+    int set;
+
     //chosen copy scheme
     int (*send)(void*, int, int, int, struct _Laik_Shmem_Data*);
 
