@@ -132,7 +132,7 @@ int laik_aseq_bufsize(Laik_ActionSeq* as)
 Laik_Action* laik_aseq_addAction(Laik_ActionSeq* as, unsigned int size,
                                  Laik_ActionType type, int round, int tid)
 {
-    assert(round < 255);
+    //assert(round < 255);
 
     if (as->newBytesUsed + size > as->newBytesAlloc) {
         // enlarge buffer by more than <size>
@@ -149,11 +149,11 @@ Laik_Action* laik_aseq_addAction(Laik_ActionSeq* as, unsigned int size,
 
     assert(type < 256);
     assert(size < 256);
-    assert(round < 256);
+    //assert(round < 256);
     assert(tid < 128);
     a->type  = (unsigned char) type;
     a->len   = (unsigned char) size;
-    a->round = (unsigned char) round;
+    a->round = (unsigned int) round;
     a->tid   = (unsigned char) tid;
     a->mark  = 0;
     a->chain_idx = 0;
@@ -246,7 +246,7 @@ void laik_aseq_addHalt(Laik_ActionSeq* as)
     laik_aseq_addAction(as, sizeof(Laik_Action), LAIK_At_Halt, 0, 0);
 }
 
-void laik_aseq_addreturntoPrimary(Laik_ActionSeq* as, int round)
+void laik_aseq_addReturnToPrimary(Laik_ActionSeq* as, int round)
 {
     laik_aseq_addAction(as, sizeof(Laik_Action), LAIK_AT_ReturnToPrimary, round, 0);
 }

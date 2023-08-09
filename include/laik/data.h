@@ -340,6 +340,9 @@ typedef void (*laik_layout_init_t)(Laik_Mapping* m, char* header, int n);
 // return string describing the layout (for debug output)
 typedef char* (*laik_layout_describe_t)(Laik_Layout*);
 
+typedef void (*laik_layout_reduce_t) (Laik_Mapping* to, const Laik_Mapping* from1, const Laik_Mapping* from2, 
+                                            Laik_Data* data, Laik_Range* range, Laik_ReductionOperation redOp);
+
 // header for memory segments
 struct _Laik_Layout_Memory_Header {
     size_t size;
@@ -363,6 +366,7 @@ struct _Laik_Layout {
     laik_layout_unpack_t unpack;
     laik_layout_copy_t copy;
 
+    laik_layout_reduce_t reduce;
     laik_layout_init_t init;
 };
 
@@ -375,7 +379,8 @@ void laik_init_layout(Laik_Layout* l, int dims, int map_count, uint64_t count,
                       laik_layout_pack_t pack,
                       laik_layout_unpack_t unpack,
                       laik_layout_copy_t copy,
-                      laik_layout_init_t alloc);
+                      laik_layout_reduce_t reduce,
+                      laik_layout_init_t init);
 
 // (slow) generic copy just using offset function from layout interface
 void laik_layout_copy_gen(Laik_Range* range,

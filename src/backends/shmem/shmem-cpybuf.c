@@ -44,7 +44,7 @@ void shmem_cpybuf_alloc(struct cpyBuf* buf, size_t size){
         int shmid;
         buf -> ptr = shmem_alloc(size, &shmid);
         buf -> size = size;
-        assert(shmid> 0);
+        assert(shmid > 0);
         buf -> shmid = shmid;
     }
 }

@@ -228,7 +228,7 @@ bool laik_mpi_asyncSendRecv(Laik_ActionSeq *as)
     assert(as->newActionCount == 0);
 
     unsigned int count = 0;
-    int maxround = 0;
+    unsigned int maxround = 0;
     Laik_Action *a = as->action;
     for (unsigned int i = 0; i < as->actionCount; i++, a = nextAction(a))
     {
@@ -835,7 +835,7 @@ void laik_mpi_exec(Laik_Inst_Data* idata, Laik_ActionSeq* as)
     {   
         if(a->chain_idx > idata->index) a = laik_next_exec(idata, as);
 
-        if(!laik_aseq_hasNext(as)) return;
+        //if(!laik_aseq_hasNext(as)) return;
 
         Laik_BackendAction *ba = (Laik_BackendAction *)a;
         if (laik_log_begin(1))

@@ -20,10 +20,10 @@
 #define SHMEM_H
 
 #include "backends/shmem/shmem-cpybuf.h"
-#include "laik/core.h"
-#include<laik-internal.h>
-#include<stddef.h>
-#include<laik.h>
+#include "laik/space.h"
+#include <laik-internal.h>
+#include <stddef.h>
+#include <laik.h>
 
 #define SHMEM_FAILURE -1
 #define SHMEM_SUCCESS 0
@@ -42,8 +42,7 @@ typedef enum DataSpec{
 } DataSpec;
 
 struct commHeader{
-    DataSpec spec;
-    int receiver;
+    volatile int receiver;
     int shmid;
     int count;
     Laik_Range range;
@@ -125,15 +124,13 @@ int shmem_send(void *buffer, int count, int datatype, int recipient,  Laik_Inst_
 
 int shmem_recv(void *buffer, int count,int sender, Laik_Data* data, Laik_Inst_Data* idata, Laik_Group* g, Laik_ReductionOperation redOp);
 
-int shmem_sendMap(Laik_Mapping* map, int receiver, int shmid, Laik_Inst_Data* idata);
+int shmem_sendMap(Laik_Mapping* map, Laik_Range* range, int receiver, Laik_Inst_Data* idata);
 
-int shmem_recvMap(Laik_Mapping* map, Laik_Range* range, int count, int sender,  Laik_Inst_Data* idata, Laik_Group* g);
+int shmem_recvMap(Laik_Mapping* map, Laik_Range* range, int sender, Laik_Inst_Data* idata, Laik_Group* g);
 
-int shmem_PackSend(Laik_Mapping* map, Laik_Range range, int count, int receiver,  Laik_Inst_Data* idata);
+int shmem_sendPack(Laik_Mapping* map, Laik_Range* range, int receiver, Laik_Inst_Data* idata);
 
-int shmem_RecvUnpack(Laik_Mapping* map, Laik_Range* range, int count, int sender, Laik_Inst_Data* idata, Laik_Group* g);
-
-int shmem_RecvReduce(char* buf, int count, int sender, Laik_Type* type, Laik_ReductionOperation redOp,  Laik_Inst_Data* idata, Laik_Group* g);
+int shmem_recvReduce(Laik_Mapping* map, Laik_Range* range, Laik_Data* data, int sender, Laik_Inst_Data* idata, Laik_Group* g, Laik_ReductionOperation redOp);
 
 //------------------------------------------------------------------------------
 // copy buffer management and subgroup handling

@@ -4,6 +4,7 @@
 #include "shmem.h"
 
 #include <assert.h>
+#include <errno.h>
 #include <stddef.h>
 #include <sys/cdefs.h>
 #include <sys/shm.h>
@@ -103,7 +104,7 @@ void* shmem_alloc(size_t size, int* shimdPtr)
     int shmid = shmget(IPC_PRIVATE, alloc_size, 0644 | IPC_CREAT | IPC_EXCL);
     if (shmid == -1)
     {   
-        laik_panic("def_shmem_malloc couldn't create the shared memory segment: shmid == -1");
+        laik_panic(strerror(errno));
         return NULL;
     }
     
