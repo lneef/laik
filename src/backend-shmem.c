@@ -176,7 +176,7 @@ bool shmem_replace_MapPackAndSend(Laik_ActionSeq* as, Laik_Action* a, Laik_Trans
             
             laik_shmem_addOneCopyMap(as, aa->fromMapNo, shmid, aa->to_rank, rd, a->tid, chain_idx); 
             
-            return false;;
+            return false;
         }else {
             header_size = m->layout->header_size;
         }
@@ -185,7 +185,9 @@ bool shmem_replace_MapPackAndSend(Laik_ActionSeq* as, Laik_Action* a, Laik_Trans
 #define LEAST_HEADER_SIZE 64
     shmem_cpybuf_request(&sd->cpybuf, aa->count * data->elemsize + header_size == 0 ? LEAST_HEADER_SIZE : header_size);
 
+
     laik_shmem_addTwoCopyMap(as, aa->range, aa->fromMapNo, aa->count, aa->to_rank, rd, a->tid, chain_idx);
+    return false;
 }
 
 _Bool shmem_replace_MapRecvAndUnpack(Laik_ActionSeq* as, Laik_Action* a, Laik_TransitionContext* tc, int chain_idx)
