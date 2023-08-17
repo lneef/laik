@@ -65,7 +65,7 @@ struct _Laik_Layout_Lex {
 static int64_t offset_lex(Laik_Layout* l, int n, Laik_Index* idx);
 
 // return lex layout if given layout is a lexicographical layout
-__attribute_maybe_unused__ static bool laik_is_layout_lex(Laik_Layout* l) 
+static bool laik_is_layout_lex(Laik_Layout* l) 
 {
     return !strcmp(LEX_IDENTIFIER, l->name); // a lexicographical layout
 }

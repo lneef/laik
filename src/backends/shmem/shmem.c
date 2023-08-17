@@ -64,8 +64,9 @@ struct shmInitSeg
 };
 
 
-void deleteOpenShmSegs(__attribute_maybe_unused__ int sig)
+void deleteOpenShmSegs(int sig)
 {
+    (void) sig;
     deleteAllocatedSegments();
 }
 
