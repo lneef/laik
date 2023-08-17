@@ -320,6 +320,8 @@ int recvIntegersMPI(int *buf, int count, int sender, Laik_Inst_Data* idata, Laik
 
 //----------------------------------------------------------------------------
 // backend interface implementation: initialization
+
+double t1, t2;
 Laik_Instance *laik_init_mpi(int *argc, char ***argv)
 {
     if (mpi_instance)
@@ -418,6 +420,7 @@ Laik_Instance *laik_init_mpi(int *argc, char ***argv)
     inst->inst_data->recv = recvIntegersMPI;
 
     mpi_instance = inst;
+    t1 = MPI_Wtime();
     return inst;
 }
 
@@ -434,6 +437,9 @@ static MPIGroupData *mpiGroupData(Laik_Group *g)
 static
 void laik_mpi_finalize(Laik_Inst_Data* idata, Laik_Instance* inst)
 {
+    t2 = MPI_Wtime();
+
+    printf("t:%f", t2-t1);
     assert(inst == mpi_instance);
 
     if (mpiData(mpi_instance)->didInit)
