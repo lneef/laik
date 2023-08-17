@@ -121,9 +121,6 @@ int64_t offset_lex(Laik_Layout* l, int n, Laik_Index* idx)
             off += (idx->i[2] - e->range.from.i[2]) * e->hd->stride[2];
         }
     }
-
-    if(!((off >= 0) && (off < (int64_t) e->hd->count)))
-        laik_log(LAIK_LL_Panic, "%lu, %lu, %d, %lu, %lu", idx->i[0], idx->i[1], l->dims, e->range.to.i[0], e->range.to.i[1]);
     return off;
 }
 
@@ -132,7 +129,7 @@ static
 char* describe_lex(Laik_Layout* l)
 {
     static char s[200];
-
+    assert(laik_is_layout_lex(l));
     assert(l->describe == describe_lex);
     Laik_Layout_Lex* ll = (Laik_Layout_Lex*) l;
 
@@ -233,6 +230,7 @@ void copy_lex(Laik_Range* range,
             fromOff, fromPtr, toOff, toPtr);
     }
 
+   
     for(int64_t i3 = 0; i3 < count.i[2]; i3++) {
         char *fromPtr2 = fromPtr;
         char *toPtr2 = toPtr;
@@ -242,6 +240,55 @@ void copy_lex(Laik_Range* range,
             toPtr2   += toLayoutEntry->hd->stride[1] * elemsize;
         }
         fromPtr += fromLayoutEntry->hd->stride[2] * elemsize;
+        toPtr   += toLayoutEntry->hd->stride[2] * elemsize;
+    }
+}
+
+static void reduce_lex(Laik_Mapping* to, const Laik_Mapping* from1, const Laik_Mapping* from2, Laik_Data* data, Laik_Range* range, Laik_ReductionOperation redOp)
+{
+    Laik_Layout_Lex* from1Layout = (Laik_Layout_Lex*) from1->layout;
+    Laik_Layout_Lex* from2Layout = (Laik_Layout_Lex*) from2->layout;
+    Laik_Layout_Lex* toLayout = (Laik_Layout_Lex*) to->layout;
+
+
+    Lex_Entry* from1LayoutEntry = &(from1Layout->e[0]);
+    Lex_Entry* from2LayoutEntry = &(from2Layout->e[0]);
+    Lex_Entry* toLayoutEntry = &(toLayout->e[0]);
+
+    unsigned int elemsize = to->data->elemsize;
+    //assert(elemsize == to->data->elemsize);
+    int dims = to->layout->dims;
+    //assert(dims == to->layout->dims);
+
+    Laik_Index count;
+    laik_sub_index(&count, &(range->to), &(range->from));
+    if (dims < 3) {
+        count.i[2] = 1;
+        if (dims < 2)
+            count.i[1] = 1;
+    }
+    uint64_t ccount = count.i[0] * count.i[1] * count.i[2];
+    assert(ccount > 0);
+
+    uint64_t from1Off  = offset_lex(from1->layout, from1->layoutSection, &(range->from));
+    uint64_t from2Off  = offset_lex(from2->layout, from2->layoutSection, &(range->from));
+    uint64_t toOff    = offset_lex(to->layout, to->layoutSection, &(range->from));
+    char*    from1Ptr  = from1->start + from1Off * elemsize;
+    char*    from2Ptr  = from2->start + from2Off * elemsize;
+    char*    toPtr    = to->start   + toOff * elemsize;
+
+    for(int64_t i3 = 0; i3 < count.i[2]; i3++) {
+        char *fromPtr21 = from1Ptr;
+        char *fromPtr22 = from2Ptr;
+        char *toPtr2 = toPtr;
+        for(int64_t i2 = 0; i2 < count.i[1]; i2++) {
+            data->type->reduce(toPtr2, fromPtr21, fromPtr22, count.i[0], redOp);
+            fromPtr21 += from1LayoutEntry->hd->stride[1] * elemsize;
+            fromPtr22 += from2LayoutEntry->hd->stride[1] * elemsize;
+            toPtr2   += toLayoutEntry->hd->stride[1] * elemsize;
+        }
+        from1Ptr += from1LayoutEntry->hd->stride[2] * elemsize;
+        from2Ptr += from2LayoutEntry->hd->stride[2] * elemsize;
         toPtr   += toLayoutEntry->hd->stride[2] * elemsize;
     }
 }
@@ -561,8 +608,8 @@ Laik_Layout* laik_new_layout_lex(int n, Laik_Range* ranges)
                      pack_lex,
                      unpack_lex,
                      copy_lex,
-                     alloc_lex);
-
+                     alloc_lex,
+                     reduce_lex);
     uint64_t count = 0;
     strncpy(l->h.name, LEX_IDENTIFIER, 9);
     l->h.header_size = PAD(sizeof(Lex_Memory_Header), 64);

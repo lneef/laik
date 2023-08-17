@@ -51,45 +51,15 @@ extern const char *__progname;
 
 // generic LAIK init function
 
-void laik_init_secondaries_int(Laik_Instance* inst, Laik_Group* world, int primaryRank, int primarySize, char**backends, int num)
-{
-    
-    int size = primarySize;
-    int rank =  primaryRank;
-
-    for(int i = 1; i < num; ++i)
-    {
-        if(!strcmp(backends[i],"SHMEM" ))
-            laik_shmem_secondary_init(inst, world, &size, &rank);
-    }
-}
-
 Laik_Instance* laik_init(int* argc, char*** argv)
 {
-    char* backends;
-    char* backend_ident[MAX_BACKENDS];
-    int num_backends = 0;
     const char* override = getenv("LAIK_BACKEND");
     Laik_Instance* inst = 0;
-
-    if(override)
-    {
-        backends = strdup(override);
-        char* saveptr;
-        int i = 0;
-        for(; i < MAX_BACKENDS && backends; ++i)
-        {
-            char* str = i == 0 ? backends : NULL;
-            backend_ident[i] = strtok_r(str, ",", &saveptr);
-        }
-
-        num_backends = i - 1;
-    }
 
 #ifdef USE_MPI
     if (inst == 0) {
         // default to MPI if available, or if explicitly wanted
-        if ((override == 0) || (strcmp(backend_ident[0], "mpi") == 0)) {
+        if ((override == 0) || (strcmp(override, "mpi") == 0)) {
             inst = laik_init_mpi(argc, argv);
         }
     }
@@ -106,7 +76,7 @@ Laik_Instance* laik_init(int* argc, char*** argv)
     if (inst == 0) {
         // fall-back to "single" backend as default if MPI is not available, or
         // if "single" backend is explicitly requested
-        if ((override == 0) || (strcmp(backend_ident[0], "single") == 0)) {
+        if ((override == 0) || (strcmp(override, "single") == 0)) {
             (void) argc;
             (void) argv;
             inst = laik_init_single();
@@ -115,7 +85,7 @@ Laik_Instance* laik_init(int* argc, char*** argv)
 
 #ifdef USE_TCP
     if (inst == 0) {
-        if ((override == 0) || (strcmp(backend_ident[0], "tcp") == 0)) {
+        if ((override == 0) || (strcmp(override, "tcp") == 0)) {
             inst = laik_init_tcp(argc, argv);
         }
     }
@@ -161,9 +131,7 @@ Laik_Instance* laik_init(int* argc, char*** argv)
 
     laik_layout_register(inst, LEX_IDENTIFIER, laik_layout_adapter_lex);
 
-    //inst->num_backends = num_backends;
-
-    //laik_init_secondaries_int(inst, inst->world, inst->world->myid, inst->world->size, backend_ident, num_backends);
+    laik_init_secondaries(inst, inst->world, inst->world->myid, inst->world->size);
 
     return inst;
 }

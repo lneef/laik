@@ -228,7 +228,7 @@ bool laik_mpi_asyncSendRecv(Laik_ActionSeq *as)
     assert(as->newActionCount == 0);
 
     unsigned int count = 0;
-    int maxround = 0;
+    unsigned int maxround = 0;
     Laik_Action *a = as->action;
     for (unsigned int i = 0; i < as->actionCount; i++, a = nextAction(a))
     {
@@ -323,6 +323,8 @@ double end;
 
 //----------------------------------------------------------------------------
 // backend interface implementation: initialization
+
+double t1, t2;
 Laik_Instance *laik_init_mpi(int *argc, char ***argv)
 {
     if (mpi_instance)
@@ -419,12 +421,9 @@ Laik_Instance *laik_init_mpi(int *argc, char ***argv)
 
     inst->inst_data->send = sendIntegersMPI;
     inst->inst_data->recv = recvIntegersMPI;
-    laik_init_secondaries(inst, world, rank, size);
-
-    MPI_Barrier(MPI_COMM_WORLD);
-    begin = MPI_Wtime();
 
     mpi_instance = inst;
+    t1 = MPI_Wtime();
     return inst;
 }
 
@@ -441,7 +440,9 @@ static MPIGroupData *mpiGroupData(Laik_Group *g)
 static
 void laik_mpi_finalize(Laik_Inst_Data* idata, Laik_Instance* inst)
 {
-    end = MPI_Wtime();
+    t2 = MPI_Wtime();
+
+    printf("t:%f", t2-t1);
     assert(inst == mpi_instance);
 
     if (mpiData(mpi_instance)->didInit)
@@ -846,7 +847,7 @@ void laik_mpi_exec(Laik_Inst_Data* idata, Laik_ActionSeq* as)
     {   
         if(a->chain_idx > idata->index) a = laik_next_exec(idata, as);
 
-        if(!laik_aseq_hasNext(as)) return;
+        //if(!laik_aseq_hasNext(as)) return;
 
         Laik_BackendAction *ba = (Laik_BackendAction *)a;
         if (laik_log_begin(1))

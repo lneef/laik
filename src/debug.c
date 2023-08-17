@@ -607,9 +607,9 @@ void laik_log_Action(Laik_Action* a, Laik_ActionSeq* as)
         laik_log_Range(ba->range);
         laik_log_append(" myInMapNo %d, myOutMapNo %d, count %d, input ",
                         ba->fromMapNo, ba->toMapNo, ba->count);
-        laik_log_TransitionGroup(tc->transition, ba->inputGroup);
+        laik_log_TaskGroupAS(as, ba->inputGroup, 0);
         laik_log_append(", output ");
-        laik_log_TransitionGroup(tc->transition, ba->outputGroup);
+        laik_log_TaskGroupAS(as, ba->outputGroup, 0);
         break;
 
     case LAIK_AT_GroupReduce:

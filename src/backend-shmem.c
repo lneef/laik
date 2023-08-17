@@ -25,11 +25,6 @@
 #include "backends/shmem/shmem-actions.h"
 #include "laik/action-internal.h"
 #include "laik/action.h"
-#include "laik/backend.h"
-#include "laik/core-internal.h"
-#include "laik/core.h"
-#include "laik/data.h"
-#include "laik/debug.h"
 
 #include <assert.h>
 #include <bits/time.h>
@@ -135,7 +130,7 @@ static void shmem_replace_groupReduce(Laik_ActionSeq* as, Laik_BackendAction* ba
 
 
     char* reduceBuf = ba->fromBuf;
-
+    bool fullReduce = onSameIsland(as, sg, ba->inputGroup, ba->outputGroup, chain_idx);
     if(memberI && inSize > 1)
     {
         laik_shmem_addGroupReduce(as, ba, rd, reduceBuf, chain_idx, primaryI);
@@ -143,14 +138,12 @@ static void shmem_replace_groupReduce(Laik_ActionSeq* as, Laik_BackendAction* ba
     }
     ++rd;
 
-    bool fullReduce = onSameIsland(as, sg, ba->inputGroup, ba->outputGroup, chain_idx);
-
     if((rank == primaryI && memberI) || (rank == primaryO && memberO))
     {   
         if(!fullReduce)
             laik_aseq_addGroupReduce(as, rd, ba->inputGroup, ba->outputGroup, reduceBuf, ba->toBuf, ba->count, ba -> redOp);
-        else
-            laik_shmem_addShmemCopyToBuf(as, rd, reduceBuf, ba->toBuf, ba->count, primaryI, primaryO, ba->h.tid, chain_idx);
+        //else
+            //laik_shmem_addShmemCopyToBuf(as, rd, reduceBuf, ba->toBuf, ba->count, primaryI, primaryO, ba->h.tid, chain_idx);
     }
 
     ++rd;
@@ -166,6 +159,7 @@ bool shmem_replace_MapPackAndSend(Laik_ActionSeq* as, Laik_Action* a, Laik_Trans
     Laik_A_MapPackAndSend* aa = (Laik_A_MapPackAndSend*) a;
     Laik_Data* data = tc->data;
     int rd = 3 * a->round;
+    int header_size = 0;
     if(tc->fromList)
     {
         
@@ -180,17 +174,18 @@ bool shmem_replace_MapPackAndSend(Laik_ActionSeq* as, Laik_Action* a, Laik_Trans
             //was allocated using shmem allocator
             int shmid = shmem_manager_shmid(m->header);
             
-            laik_shmem_addOneCopyMap(as, aa->fromMapNo, shmid, aa->to_rank, rd, a->tid, chain_idx);
-
+            laik_shmem_addOneCopyMap(as, aa->fromMapNo, shmid, aa->to_rank, rd, a->tid, chain_idx); 
+            
+            return false;;
         }else {
-            shmem_cpybuf_request(&sd->cpybuf, aa->count * data->elemsize);
-
-            laik_shmem_addTwoCopyMap(as, aa->range, aa->fromMapNo, aa->count, aa->to_rank, rd, a->tid, chain_idx);
+            header_size = m->layout->header_size;
         }
-
-        return false;
     }
-    laik_shmem_addGetMapAndCopy(as, aa->range, aa->fromMapNo, rd, a->tid, aa->count, aa->to_rank, chain_idx);
+
+#define LEAST_HEADER_SIZE 64
+    shmem_cpybuf_request(&sd->cpybuf, aa->count * data->elemsize + header_size == 0 ? LEAST_HEADER_SIZE : header_size);
+
+    laik_shmem_addTwoCopyMap(as, aa->range, aa->fromMapNo, aa->count, aa->to_rank, rd, a->tid, chain_idx);
 }
 
 _Bool shmem_replace_MapRecvAndUnpack(Laik_ActionSeq* as, Laik_Action* a, Laik_TransitionContext* tc, int chain_idx)
@@ -213,9 +208,10 @@ _Bool shmem_replace_MapRecvAndUnpack(Laik_ActionSeq* as, Laik_Action* a, Laik_Tr
     return false;
 }
 
-void shmem_replace_MapGroupReduce(Laik_ActionSeq* as, Laik_Action* a, Laik_Data* data, Laik_Shmem_Comm* sg, int chain_idx)
+void shmem_replace_MapGroupReduce(Laik_ActionSeq* as, Laik_Action* a, Laik_TransitionContext* tc, Laik_Shmem_Data* sd, Laik_Shmem_Comm* sg, int chain_idx)
 {
     Laik_BackendAction* ba = (Laik_BackendAction*) a;
+    Laik_Data* data = tc->data;
 
     int rank = sg->myid;
     int rd = 3 * ba->h.round;;
@@ -229,28 +225,58 @@ void shmem_replace_MapGroupReduce(Laik_ActionSeq* as, Laik_Action* a, Laik_Data*
     bool memberO = laik_aseq_isInGroup(as, ba->outputGroup, rank, chain_idx);
     primaryO = outSize > 0 ? laik_aseq_taskInGroup(as, ba->outputGroup, 0,  chain_idx) : -1;
 
-
-    char* fromBuf = rank == primaryI ? shmem_manager_alloc(ba -> count * data -> elemsize) : NULL;
-    char* toBuf = rank == primaryO ? shmem_manager_alloc(ba -> count * data->elemsize) : NULL;
-
     bool fullReduce = onSameIsland(as, sg, ba->inputGroup, ba->outputGroup, chain_idx);
+
+    Shmem_CopyScheme csI = SHMEM_None;
+    Shmem_CopyScheme csO = SHMEM_None;
+
     if(memberI)
-    {
-        laik_shmem_addMapGroupReduce(as, ba, rd, primaryI, fromBuf, chain_idx);
+    {   
+        int header_size = 0;
+        if(tc->fromList)
+        {   
+            Laik_Mapping* map = &tc->fromList->map[ba->fromMapNo];
+
+            csI = is_shmem_allocator(map->allocator) && sd -> copyScheme == 1 ? SHMEM_OneCopy : SHMEM_TwoCopy;
+            
+            header_size = map->layout->header_size;
+        }else {
+            csI = SHMEM_TwoCopy;
+        }            
+        
+        laik_shmem_addMapGroupReduce(as, ba, rd, primaryI, csI, chain_idx);
+
+        if(csI == SHMEM_TwoCopy) shmem_cpybuf_request(&sd->cpybuf, ba->count * data->elemsize + header_size == 0 ? 64 : header_size);
+
     }
 
     if(rank == primaryI || rank == primaryO)
     {   
         if(!fullReduce)
-            laik_aseq_addGroupReduce(as, rd + 1, ba->inputGroup, ba->outputGroup, fromBuf, toBuf, ba->count, ba -> redOp);
+            laik_aseq_addr(a, as, rd + 1, 0);
         else
-            laik_shmem_addShmemCopyToBuf(as, rd + 1, fromBuf, toBuf, ba->count, primaryI, primaryO, ba->h.tid, chain_idx);
+            laik_shmem_addShmemCopyToBuf(as, rd + 1, ba->range, ba->fromMapNo, ba->toMapNo, primaryI, primaryO, csI, a->tid, chain_idx);
     }
 
-    if(memberO)
+    if(memberO && outSize > 1)
     {
-        laik_shmem_addMapBroadcast(as, ba, rd + 2, primaryO , toBuf, chain_idx); 
+        int header_size = 0;
+        if(tc->toList)
+        {   
+            Laik_Mapping* map = &tc->toList->map[ba->toMapNo];
+
+            csO = is_shmem_allocator(map->allocator) && sd ->copyScheme == 1 ? SHMEM_OneCopy : SHMEM_TwoCopy;
+            
+            header_size = map->layout->header_size;
+        }else {
+            csO = SHMEM_TwoCopy;
+        }            
+        
+        laik_shmem_addMapBroadcast(as, ba, rd + 2, primaryO, csO, chain_idx);
+
+        if(csO == SHMEM_TwoCopy) shmem_cpybuf_request(&sd->cpybuf, ba->count * data->elemsize + header_size == 0 ? 64 : header_size);
     }
+        
 
 }
 
@@ -317,6 +343,7 @@ void laik_shmem_secondary_prepare(Laik_Inst_Data* idata, Laik_ActionSeq *as)
     bool zc = false;
     a = as->action;
     int rd = 0;
+    unsigned int maxround = 0;
     for (unsigned int i = 0; i < as->actionCount; i++, a = nextAction(a))
     {
         ret = false;
@@ -347,8 +374,12 @@ void laik_shmem_secondary_prepare(Laik_Inst_Data* idata, Laik_ActionSeq *as)
         }
         case LAIK_AT_MapGroupReduce:
         {
-            // should not be here if there is a backend below
-            shmem_replace_MapGroupReduce(as, a, tc->data, sg, chain_idx);
+            shmem_replace_MapGroupReduce(as, a, tc, sd, sg, chain_idx);
+            ret = true;
+            break;
+        }
+        case LAIK_AT_ReturnToPrimary:
+        {
             ret = true;
             break;
         }
@@ -356,6 +387,8 @@ void laik_shmem_secondary_prepare(Laik_Inst_Data* idata, Laik_ActionSeq *as)
             break;
         }
 
+        // max round for ReturnToPrimary(new maxround of single reduction is 3*a->round + 2)
+        maxround = 3 * a->round + 3 > maxround ? 3 * a->round + 3 : maxround;
         changed |= ret;
         rd = a->round;
         if(!ret)
@@ -373,6 +406,7 @@ void laik_shmem_secondary_prepare(Laik_Inst_Data* idata, Laik_ActionSeq *as)
     }
 
     shmem_cpybuf_alloc_requested(&sd->cpybuf);
+    laik_aseq_addReturnToPrimary(as, maxround);
     laik_aseq_activateNewActions(as);
     laik_log_ActionSeqIfChanged(changed, as, "After shmem prepare");
 }
@@ -390,7 +424,7 @@ void laik_shmem_secondary_exec(Laik_Inst_Data* idata, Laik_ActionSeq *as)
     {
         if(a->chain_idx > idata->index) a = laik_next_exec(idata, as);
 
-        if(!laik_aseq_hasNext(as)) return;
+        //if(!laik_aseq_hasNext(as)) return;
 
         if(a->chain_idx < idata->index) return;
 
@@ -432,18 +466,12 @@ void laik_shmem_secondary_exec(Laik_Inst_Data* idata, Laik_ActionSeq *as)
             laik_shmem_exec_MapBroadCast(as, a, tc, idata, g);
             break;
         }
-        case LAIK_AT_ShmemGetMapAndCopy:
-        {
-            assert(a->chain_idx == index);
-            laik_shmem_exec_GetMapAndCopy(a, tc, idata);
-            break;
-        }
         case LAIK_AT_ShmemTwoCopyMap:
         {
             assert(a->chain_idx == index);
             Laik_A_ShmemTwoCopyMap* aa = (Laik_A_ShmemTwoCopyMap*) a;
             Laik_Mapping* m = &tc->fromList->map[aa->mapNo];
-            shmem_PackSend(m, *aa->range, aa->count, aa->to_rank, idata);
+            shmem_sendPack(m, aa->range, aa->to_rank, idata);
             break;
         }
         case LAIK_AT_ShmemOneCopyMap:
@@ -451,7 +479,7 @@ void laik_shmem_secondary_exec(Laik_Inst_Data* idata, Laik_ActionSeq *as)
             assert(a->chain_idx == index);
             Laik_A_ShmemOneCopyMap* aa = (Laik_A_ShmemOneCopyMap*) a;
             Laik_Mapping* m = &tc->fromList->map[aa->mapNo];
-            shmem_sendMap(m, aa->to_rank, aa->shmid, idata);
+            shmem_sendMap(m, NULL, aa->to_rank, idata);
             break;
         }
         case LAIK_AT_ShmemReceiveMap:
@@ -513,15 +541,6 @@ bool laik_shmem_log_action(Laik_Inst_Data* idata, Laik_ActionSeq* as, Laik_Actio
         laik_log_append("ShmemGroupBroadCast: ");
         laik_log_append("T%d ==>", laik_aseq_taskInGroup(as, aa->subgroup, 0, a->chain_idx));
         laik_log_TaskGroupAS(as, aa->subgroup, a->chain_idx);
-        break;
-    }
-    case LAIK_AT_ShmemGetMapAndCopy:
-    {
-        Laik_A_ShmemGetMapAndCopy* aa = (Laik_A_ShmemGetMapAndCopy*) a;
-        laik_log_append("ShmemCopyMapToReceiver: ");
-        laik_log_Range(aa->range);
-        laik_log_append(" mapNo %d, count %llu ==> T%d",
-                        aa->mapNo, (unsigned long long) aa->count, aa->to_rank);
         break;
     }
     case LAIK_AT_ShmemOneCopyMap:
