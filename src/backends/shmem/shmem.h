@@ -47,11 +47,11 @@ typedef enum DataSpec{
 } DataSpec;
 
 struct commHeader{
-    volatile int receiver;
+    atomic_int receiver;
     int shmid;
     int count;
     Laik_Range range;
-    atomic_int barrrier;
+    atomic_int barrier;
 };
 
 #pragma pack(push, 1)

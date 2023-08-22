@@ -423,23 +423,18 @@ int shmem_zeroCopySyncRecv(int sender, Laik_Inst_Data* idata, Laik_Group* g)
     int shmid = sg->headershmids[0];
     //syscall(SYS_membarrier, MEMBARRIER_CMD_REGISTER_GLOBAL_EXPEDITED, 0, 0);
     struct commHeader* shmp = shmem_manager_attach(shmid, 0);
-    while(shmp->receiver != sg->size)
+    while(shmp->receiver >= -1)
     {
 
     }
 
-    atomic_fetch_add(&shmp->barrrier, 1);
+    atomic_fetch_add(&shmp->receiver, 1);
 
-    while(atomic_load(&shmp->barrrier) != sg->size)
+    while(atomic_load(&shmp->receiver) != -1)
     {
 
     }
     //syscall(SYS_membarrier, MEMBARRIER_CMD_GLOBAL_EXPEDITED, 0, 0);
-
-    while(shmp->receiver  != -1)
-    {
-
-    }
 
 
     return SHMEM_SUCCESS;
@@ -452,11 +447,10 @@ int shmem_zeroCopySyncSend(int receiver, Laik_Inst_Data* idata, Laik_Group* g)
     Laik_Shmem_Comm* sg = shmem_comm(idata, g);
     //syscall(SYS_membarrier, MEMBARRIER_CMD_REGISTER_GLOBAL_EXPEDITED, 0, 0);
     struct commHeader* shmp = sd->shmp;
+    int expected = -sg->size;
 
-    atomic_init(&shmp->barrrier, 1);
-    shmp->receiver = sg->size;
-
-    while(atomic_load(&shmp->barrrier) != sg->size)
+    atomic_init(&shmp->receiver, expected);
+    while(atomic_load(&shmp->receiver) != -1)
     {
     }
 
@@ -464,7 +458,7 @@ int shmem_zeroCopySyncSend(int receiver, Laik_Inst_Data* idata, Laik_Group* g)
     //syscall(SYS_membarrier, MEMBARRIER_CMD_GLOBAL_EXPEDITED, 0, 0);
 
     
-    shmp->receiver = -1;
+    //shmp->receiver = -1;
     return SHMEM_SUCCESS;
 }
 

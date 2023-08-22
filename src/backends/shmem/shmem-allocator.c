@@ -211,12 +211,6 @@ void shmem_free_zero_copy(Laik_Data* data, struct shmHeader* sh)
 
     if(myid == 0)
     {
-        struct shmid_ds sd;
-
-        do {
-            shmctl(shmid, IPC_STAT, &sd);
-        }while (sd.shm_nattch != 1);
-
         shmdt(sh);
 
         shmctl(shmid, IPC_RMID, NULL);
