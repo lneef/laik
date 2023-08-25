@@ -98,7 +98,7 @@ static void shmem_init_sync(int rank, int size, Laik_Inst_Data* idata, Laik_Grou
 
 static void shmem_parse_affinity_mask(Laik_Shmem_Data* sd)
 {
-    const char* override = getenv("LAIK_SHMEM_AFFINITY");
+    const char* override = getenv("LAIK_SHMEM_CPU_SETS");
     if(!override) return;
     unsigned size = CPU_ALLOC_SIZE(get_nprocs_conf());
     cpu_set_t* mask = CPU_ALLOC(size);
@@ -111,29 +111,33 @@ static void shmem_parse_affinity_mask(Laik_Shmem_Data* sd)
     int set = 0;
     while(override[i])
     {
-        CPU_ZERO_S(size,mask);
+        CPU_ZERO_S(size, mask);
         for(int j = 0; override[i] && override[i] !=',';  ++i, ++j)
         {
             if(override[i] == '1')
+            {
                 CPU_SET_S(j, size, mask);
+            }
         }
 
         CPU_AND_S(size, mask, mine, mask);
 
         if(!CPU_EQUAL_S(size, mask, zero))
         {
-            sd->affinity = set;
+            sd->set = set;
             CPU_FREE(mine);
             CPU_FREE(zero);
             CPU_FREE(mask);
             return;
         }
+        ++set;
 
-        if(!override)
+        if(!override[i])
             break;
         
         ++i;
     }
+
 
     laik_panic("No fitting mask");
 }
@@ -158,10 +162,9 @@ static int shmem_split_location(int rank, int size, Laik_Inst_Data* idata, int s
         RECV_INTS(&mask, 1, 0, idata, g);
     }
 
-    //get number of configured processes
     int segment_size =  sizeof(struct shmInitSeg);
     segment_size +=  sd->affinity ? sizeof(atomic_int) * size : 0;
-
+  
     int address = shmAddr + mask;
     int shmid = shmget(address, segment_size, IPC_EXCL | 0644 | IPC_CREAT);
     if (shmid == -1)
@@ -171,7 +174,7 @@ static int shmem_split_location(int rank, int size, Laik_Inst_Data* idata, int s
         
         if (shmid == -1)
         {
-            laik_panic("Init failed");
+            laik_panic(strerror(errno));
             return SHMEM_SHMGET_FAILED;
         }
 
@@ -182,9 +185,6 @@ static int shmem_split_location(int rank, int size, Laik_Inst_Data* idata, int s
             return SHMEM_SHMAT_FAILED;
 
         // register for barrier
-        shmem_init_sync(rank, size, idata, g);
-
-        // receive info that all processes have reached barrier
         shmem_init_sync(rank, size, idata, g);
 
         if(!sd->affinity) sg -> location = atomic_load(&shmp->colour);
@@ -210,30 +210,34 @@ static int shmem_split_location(int rank, int size, Laik_Inst_Data* idata, int s
         
         // register for barrier
         shmem_init_sync(rank, size, idata, g);
-
-        // receive info that all processes have reached barrier
-        shmem_init_sync(rank, size, idata, g);
-        // global id in laik as identifier for shared memory domain
     }
 
     if(sd->affinity)
     {
-        atomic_init(&shmp->procs[rank], sd->affinity);
+        bool found = false;
+        atomic_init(&shmp->procs[rank], sd->set);
 
         shmem_init_sync(rank, size, idata, g);
+        shmem_init_sync(rank, size, idata, g);
+
         for(int i = 0; i < size; ++i)
         {
-            if(shmp->procs[i] <= 0) continue;
+            if(atomic_load(&shmp->procs[i]) < 0) continue;
 
             // compare cpu_set of given pid unitl an equal on is found
-            int set = atomic_load(&shmp->procs[rank]);
-            if(set == sd->affinity)
+            int set = atomic_load(&shmp->procs[i]);
+            if(set == sd->set)
             {
                 sg->location = i;
+                found = true;
                 break;
             }
 
         }
+
+        // Should definitively not happen
+        if(!found) laik_panic("No fitting set found");
+
     }
 
     shmdt(shmp);
@@ -617,7 +621,7 @@ int shmem_update_comm(Laik_Shmem_Comm* sg, Laik_Group* g, Laik_Inst_Data* idata,
 
 int shmem_init_comm(Laik_Shmem_Comm *sg, Laik_Group *g, Laik_Inst_Data *idata, int rank, int size)
 {
-    return shmem_update_comm(sg, g, idata,size, SHM_RESIZE_KEY, rank);
+    return shmem_update_comm(sg, g, idata,size, SHM_KEY, rank);
 }
 
 static char* saveptrR;
