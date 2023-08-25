@@ -17,6 +17,7 @@
  */
 
 //# ifdef USE_MPI
+#include <bits/time.h>
 #include <laik-internal.h>
 #include "laik-backend-mpi.h"
 #include "laik/action.h"
@@ -32,6 +33,7 @@
 #include <string.h>
 #include <sys/cdefs.h>
 #include <sys/types.h>
+#include <time.h>
 #include <unistd.h>
 #include <string.h>
 
@@ -317,11 +319,13 @@ int recvIntegersMPI(int *buf, int count, int sender, Laik_Inst_Data* idata, Laik
     MPIGroupData* gd = (MPIGroupData*) g->backend_data[0];
     return MPI_Recv(buf, count, MPI_INTEGER, sender, 0, gd->comm, &st);
 }
-double b,e;
 //----------------------------------------------------------------------------
 // backend interface implementation: initialization
+
+struct timespec start, end;
 Laik_Instance *laik_init_mpi(int *argc, char ***argv)
 {
+    clock_gettime(CLOCK_MONOTONIC, &start);
     if (mpi_instance)
         return mpi_instance;
 
@@ -419,7 +423,6 @@ Laik_Instance *laik_init_mpi(int *argc, char ***argv)
 
     mpi_instance = inst;
 
-    b=MPI_Wtime();
     return inst;
 }
 
@@ -437,8 +440,6 @@ static
 void laik_mpi_finalize(Laik_Inst_Data* idata, Laik_Instance* inst)
 {
     assert(inst == mpi_instance);
-    e = MPI_Wtime();
-    printf("%f,", e-b);
     if (mpiData(mpi_instance)->didInit)
     {
         int err = MPI_Finalize();
@@ -447,6 +448,12 @@ void laik_mpi_finalize(Laik_Inst_Data* idata, Laik_Instance* inst)
     }
 
     laik_next_finalize(idata, inst);
+
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    int64_t time = ((int64_t)end.tv_sec - (int64_t)start.tv_sec) * (int64_t)1000000000
+         + ((int64_t)end.tv_nsec - (int64_t)start.tv_nsec);
+
+    printf("%lo,", time);
 
 }
 
