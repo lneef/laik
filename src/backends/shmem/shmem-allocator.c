@@ -138,7 +138,7 @@ void* shmem_key_alloc(int key, size_t size, int* shimdPtr)
     int shmid = shmem_shmid(key, alloc_size, IPC_CREAT | IPC_EXCL | 0644);
     if (shmid == -1)
     {   
-        shmid = shmem_shmid(key, size, 0644);
+        shmid = shmem_shmid(key, alloc_size, 0644);
     }
 
     // second shimd failed
