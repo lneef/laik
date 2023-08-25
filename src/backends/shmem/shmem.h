@@ -79,6 +79,9 @@ typedef struct _Laik_Shmem_Comm
     // shmids of headers of ranks in the location
     int* headershmids;
 
+    struct commHeader** headers;
+
+
 }Laik_Shmem_Comm;
 
 typedef struct _Laik_Shmem_Data

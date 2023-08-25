@@ -168,7 +168,7 @@ bool shmem_replace_MapPackAndSend(Laik_ActionSeq* as, Laik_Action* a, Laik_Trans
         {
             if(shmem_manager_zeroCopy(m->header))
             {
-                //laik_shmem_addZeroCopySync(as, LAIK_AT_ShmemZeroCopySyncSend, aa->to_rank, rd, a->tid, chain_idx);
+                laik_shmem_addZeroCopySync(as, LAIK_AT_ShmemZeroCopySyncSend, aa->to_rank, rd, a->tid, chain_idx);
                 return true;
             }
             //was allocated using shmem allocator
@@ -200,7 +200,7 @@ _Bool shmem_replace_MapRecvAndUnpack(Laik_ActionSeq* as, Laik_Action* a, Laik_Tr
         if(is_shmem_allocator(m->allocator) && shmem_manager_zeroCopy(m->header))
         {
 
-            //laik_shmem_addZeroCopySync(as, LAIK_AT_ShmemZeroCopySyncRecv, aa->from_rank, 3 * a->round, a->tid, chain_idx);
+            laik_shmem_addZeroCopySync(as, LAIK_AT_ShmemZeroCopySyncRecv, aa->from_rank, 3 * a->round, a->tid, chain_idx);
             return true;
         }
     }
@@ -399,6 +399,8 @@ void laik_shmem_secondary_prepare(Laik_Inst_Data* idata, Laik_ActionSeq *as)
 
         
     }
+
+    /*
     if(zc)
     {   if(sg->myid != 0)
             laik_shmem_addZeroCopySync(as, LAIK_AT_ShmemZeroCopySyncRecv, 0, 3 * rd + 3, 0, idata->index);
@@ -406,6 +408,7 @@ void laik_shmem_secondary_prepare(Laik_Inst_Data* idata, Laik_ActionSeq *as)
             laik_shmem_addZeroCopySync(as, LAIK_AT_ShmemZeroCopySyncSend, 0, 3 * rd + 3, 0, idata->index);
 
     }
+    */
 
     shmem_cpybuf_alloc_requested(&sd->cpybuf);
     laik_aseq_addReturnToPrimary(as, maxround);
@@ -592,7 +595,7 @@ bool laik_shmem_log_action(Laik_Inst_Data* idata, Laik_ActionSeq* as, Laik_Actio
     case LAIK_AT_ShmemZeroCopySyncSend:
     {
         Laik_A_ShmemZeroCopySync* aa = (Laik_A_ShmemZeroCopySync*) a;
-        laik_log_append("ShmemZeroCopySync with T%D", aa->peer);
+        laik_log_append("ShmemZeroCopySync with T%d", aa->peer);
         break;
     }
     default:
