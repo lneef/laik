@@ -139,7 +139,6 @@ void* def_shmem_malloc(Laik_Data* d, Laik_Layout* ll, Laik_Range* range, Laik_Pa
 
 bool allow_reuse(Laik_Data* data, Laik_Mapping* m)
 {
-    if(!zero_copy) return true;
     Laik_Inst_Data* idata = data->backend_data;
     Laik_Shmem_Comm* sg = data->activePartitioning->group->backend_data[idata->index];
 
