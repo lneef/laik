@@ -689,7 +689,7 @@ void checkMapReuse(Laik_MappingList* toList, Laik_MappingList* fromList)
             fromMap = &(fromList->map[sNo]);
             if (fromMap->base == 0) continue;
             if (fromMap->reusedFor >= 0) continue; // only reuse once
-            //if (fromMap->allocator->check && ! fromMap->allocator->check(fromMap->data, fromMap)) continue;
+            if (fromMap->allocator->check && ! fromMap->allocator->check(toMap->data, fromMap)) continue;
 
             // does new mapping fit into old?
             bool reuse = (toList->layout->reuse)(toList->layout, i, fromList->layout, sNo);

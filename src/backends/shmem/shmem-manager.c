@@ -140,18 +140,27 @@ void* def_shmem_malloc(Laik_Data* d, Laik_Layout* ll, Laik_Range* range, Laik_Pa
 bool allow_reuse(Laik_Data* data, Laik_Mapping* m)
 {
     Laik_Inst_Data* idata = data->backend_data;
+    Laik_Shmem_Data* sd = idata->backend_data;
+    if(sd->copyScheme > 0) return true;
     Laik_Shmem_Comm* sg = data->activePartitioning->group->backend_data[idata->index];
 
     Laik_Partitioning* p = m->data->activePartitioning;
     Laik_RangeList* rl = laik_partitioning_allranges(p);
 
-    bool allow = false;
+    laik_log_Range(&m->allocatedRange);
+    laik_log_flush(0);
+
+    bool allow = true;
     for(unsigned i = 0 ; i < rl->count; ++i)
     {
-        if(sg->locations[rl->trange[i].task] == sg->location) continue;
+        if(sg->libLocations[rl->trange[i].task] == 0) continue;
+        laik_log_Range(&rl->trange[i].range);
+        laik_log_flush(0);
         allow &= laik_range_within_range(&rl->trange[i].range, &m->allocatedRange);
 
     }
+
+    laik_log(2, "can:%d", allow);
 
     return allow;
 }

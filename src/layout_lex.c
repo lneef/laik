@@ -165,6 +165,7 @@ bool reuse_lex(Laik_Layout* l, int n, Laik_Layout* old, int nold)
 
     Lex_Entry* eNew = &(lnew->e[n]);
     Lex_Entry* eOld = &(lold->e[nold]);
+
     if (!laik_range_within_range(&(eNew->range), &(eOld->range))) {
         // no, cannot reuse
         return false;
