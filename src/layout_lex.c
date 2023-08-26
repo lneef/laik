@@ -566,6 +566,26 @@ static void init_lex(Laik_Layout_Lex* ll, Lex_Entry* e, int dims, Laik_Range* ra
      e->range = *range;
 }
 
+void laik_layout_init_lex(Laik_Mapping* m, char* header, int n)
+{
+    Laik_Layout_Lex* ll = (Laik_Layout_Lex*)m->layout;
+    Lex_Memory_Header* lold = ll->e[n].hd;
+    if(!header)
+    {
+        m->header = (char*)lold;
+        return;
+    }
+
+    Lex_Memory_Header* hd = (Lex_Memory_Header*) header;
+    hd->count = lold->count;
+    memcpy(hd->stride, lold->stride, 3 * sizeof(uint64_t));
+    strncpy(hd->hd.name, LEX_IDENTIFIER, 9);
+    hd->hd.size = ll->h.header_size;
+
+    free(ll->e[n].hd);
+    ll->e[n].hd = hd;
+}
+
 size_t alloc_lex(Laik_Mapping* m, int n, Laik_Partitioning* p)
 {
     Laik_Layout_Lex* ll = (Laik_Layout_Lex*)m->layout;
@@ -608,6 +628,7 @@ Laik_Layout* laik_new_layout_lex(int n, Laik_Range* ranges)
                      pack_lex,
                      unpack_lex,
                      copy_lex,
+                     laik_layout_init_lex,
                      alloc_lex,
                      reduce_lex);
     uint64_t count = 0;

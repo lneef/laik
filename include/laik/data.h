@@ -340,6 +340,8 @@ typedef size_t (*laik_layout_alloc_t)(Laik_Mapping* m, int n, Laik_Partitioning*
 // return string describing the layout (for debug output)
 typedef char* (*laik_layout_describe_t)(Laik_Layout*);
 
+typedef void (*laik_layout_init_t)(Laik_Mapping* m, char* header, int n);
+
 typedef void (*laik_layout_reduce_t) (Laik_Mapping* to, const Laik_Mapping* from1, const Laik_Mapping* from2, 
                                             Laik_Data* data, Laik_Range* range, Laik_ReductionOperation redOp);
 
@@ -366,6 +368,7 @@ struct _Laik_Layout {
     laik_layout_unpack_t unpack;
     laik_layout_copy_t copy;
 
+    laik_layout_init_t init;
     laik_layout_alloc_t alloc;
     laik_layout_reduce_t reduce;
 };
@@ -379,6 +382,7 @@ void laik_init_layout(Laik_Layout* l, int dims, int map_count, uint64_t count,
                       laik_layout_pack_t pack,
                       laik_layout_unpack_t unpack,
                       laik_layout_copy_t copy,
+                      laik_layout_init_t init,
                       laik_layout_alloc_t alloc,
                       laik_layout_reduce_t reduce);
 

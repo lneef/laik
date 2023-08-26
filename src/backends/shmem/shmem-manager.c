@@ -15,6 +15,7 @@
  */
 
 #include <assert.h>
+#include <netinet/in.h>
 #include <stdalign.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -83,15 +84,22 @@ void def_shmem_free(Laik_Data* d, Laik_Mapping* map){
     }
     
 }
-int zero_copy = 1;
+static int pair(int colour, int rank)
+{
+    int tmp = (colour + rank) * (colour + rank + 1);
+    return tmp/2 + colour + 1;
+}
+
 
 #define KEY_OFFSET 0xFFFF
 static int current = 0;
 void* def_shmem_malloc(Laik_Data* d, Laik_Layout* ll, Laik_Range* range, Laik_Partitioning* par){
     int shmid;
-
+    Laik_Inst_Data* idata = d->backend_data;
     // if zero copy not possible, dont allow it
-    if(!zero_copy)
+
+    Laik_Shmem_Data* sd = idata->backend_data;
+    if(sd->copyScheme != 0)
     {
         size_t size = laik_range_size(range) * d->elemsize;
         return shmem_alloc(size, &shmid);
@@ -106,13 +114,13 @@ void* def_shmem_malloc(Laik_Data* d, Laik_Layout* ll, Laik_Range* range, Laik_Pa
     };
 
     Laik_Group* g = par->group;
-    Laik_Inst_Data* idata = d->backend_data;
+    
     Laik_Shmem_Comm* sg = g->backend_data[idata->index];
 
     // only works for one secondary backend directly below the primary
     for(unsigned i = 0; i < rl->count; ++i)
     {
-        if(sg->locations[rl->trange[i].task] != sg->location) continue;
+        if(sg->libLocations[rl->trange[i].task] == 0) continue;
         laik_range_expand(&alloc_range, &rl->trange[i].range);
     }
     if(laik_range_isEqual(range, &alloc_range))
@@ -123,8 +131,9 @@ void* def_shmem_malloc(Laik_Data* d, Laik_Layout* ll, Laik_Range* range, Laik_Pa
     size_t size = laik_range_size(&alloc_range) * d ->elemsize;
     size += ll->header_size;
     *range = alloc_range;
-    current += sg->location + 1;
-    void* ptr = shmem_key_alloc(KEY_OFFSET + current, size, &shmid);
+    int mask = pair(sg->zcloc, current++);
+    laik_log(2, "%d", mask);
+    void* ptr = shmem_key_alloc(KEY_OFFSET + mask, size, &shmid);
     return ptr;
 }
 

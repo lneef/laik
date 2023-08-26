@@ -79,6 +79,10 @@ typedef struct _Laik_Shmem_Comm
     // shmids of headers of ranks in the location
     int* headershmids;
 
+    unsigned char* libLocations;
+
+    int zcloc;
+
     struct commHeader** headers;
 
 

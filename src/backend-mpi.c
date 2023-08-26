@@ -309,7 +309,7 @@ int sendIntegersMPI(int *buf, int count, int receiver, Laik_Inst_Data* idata, La
 {
     (void) idata; // not used
     MPIGroupData* gd = (MPIGroupData*) g->backend_data[0];
-    return MPI_Send(buf, count, MPI_INTEGER, receiver, 0, gd->comm);
+    return MPI_Ssend(buf, count, MPI_INTEGER, receiver, 0, gd->comm);
 }
 
 int recvIntegersMPI(int *buf, int count, int sender, Laik_Inst_Data* idata, Laik_Group* g)

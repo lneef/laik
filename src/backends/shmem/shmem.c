@@ -126,6 +126,7 @@ static void shmem_parse_affinity_mask(Laik_Shmem_Data* sd)
 
         if(!CPU_EQUAL_S(size, mask, zero))
         {
+            laik_log(2, "%d", set);
             sd->set = set;
             CPU_FREE(mine);
             CPU_FREE(zero);
@@ -217,7 +218,7 @@ static int shmem_split_location(int rank, int size, Laik_Inst_Data* idata, int s
     if(sd->affinity)
     {
         bool found = false;
-        atomic_init(&shmp->procs[rank], sd->set);
+        atomic_store(&shmp->procs[rank], sd->set);
 
         shmem_init_sync(rank, size, idata, g);
         shmem_init_sync(rank, size, idata, g);
@@ -359,7 +360,7 @@ int shmem_sendPack(Laik_Mapping* map, Laik_Range* range, int receiver,  Laik_Ins
     tmp.layout = ll;
     tmp.header = sd->cpybuf.ptr;
     tmp.layoutSection = tmp.mapNo = 0;
-    //ll->init(&tmp, sd->cpybuf.ptr, 0);
+    ll->init(&tmp, sd->cpybuf.ptr, 0);
     
     struct commHeader* shmp = sd->shmp;
     shmp->range = *range;
@@ -651,11 +652,18 @@ int shmem_update_comm(Laik_Shmem_Comm* sg, Laik_Group* g, Laik_Inst_Data* idata,
     sg->headershmids = malloc(sg->size * sizeof(int));
     sg->headers = malloc(sg->size * sizeof(void*));
 
+    sg->libLocations = calloc(g->size, sizeof(unsigned char));
+
     for(int i = 0; i < sg->size; ++i)
     {
         if(i != sg->myid)
         {
+            int libRank;
             RECV_INTS(&sg->headershmids[i], 1, sg->primaryRanks[i], idata, g);
+            RECV_INTS(&libRank, 1, sg->primaryRanks[i], idata, g);
+            sg->libLocations[libRank] = 1;
+
+            if(i == 0) sg->zcloc = libRank;
             continue;
         }
 
@@ -663,6 +671,9 @@ int shmem_update_comm(Laik_Shmem_Comm* sg, Laik_Group* g, Laik_Inst_Data* idata,
         {
             if(j == sg->myid) continue;
             SEND_INTS(&sd->headerShmid, 1, sg->primaryRanks[j], idata, g);
+            SEND_INTS(&g->myid, 1, sg->primaryRanks[j], idata, g);
+
+            if(i == 0) sg->zcloc = g->myid;
         }
     }
 
@@ -671,6 +682,8 @@ int shmem_update_comm(Laik_Shmem_Comm* sg, Laik_Group* g, Laik_Inst_Data* idata,
         if(i == sg->myid) continue;
         sg->headers[i] = shmem_manager_attach(sg->headershmids[i], 0);
     }
+
+    sg->libLocations[g->myid] = 1;
 
     sg->primaryRanks[sg->myid] = rank; 
 
@@ -696,7 +709,7 @@ int shmem_secondary_init(Laik_Shmem_Comm* sg, Laik_Inst_Data* idata, Laik_Group*
     if(!saveptrA)
     {
         char *affinity = getenv("LAIK_SHMEM_AFFINITY");
-        affinityToken = affinity == NULL ? NULL : strtok_r(affinity, ",", &saveptrR);
+        affinityToken = affinity == NULL ? NULL : strtok_r(affinity, ",", &saveptrA);
     }else {
         affinityToken = strtok_r(NULL, ",", &saveptrA);
     }
@@ -727,17 +740,22 @@ int shmem_secondary_init(Laik_Shmem_Comm* sg, Laik_Inst_Data* idata, Laik_Group*
         copyToken = strtok_r(NULL, ",", &saveptrC);
     }
 
+    laik_log(2, "%s", copyToken);
+
     if(copyToken != 0 && !strcmp(copyToken, "2"))
     {
         sd->copyScheme = 2;
     }
-    else if(copyToken == 0 || !strcmp(copyToken, "1"))
+    else if(copyToken != 0 && !strcmp(copyToken, "1"))
     {
         sd->copyScheme = 1;
+    }else if (!copyToken || !strcmp(copyToken, "0")) {
+
+        sd->copyScheme = 0;
     }
     else 
     {
-        laik_panic("Please provide a correct copy scheme: 1 or 2");
+        laik_panic("Please provide a correct copy scheme: 0, 1 or 2");
     }
 
     sd->send = shmem_2cpy_send;
@@ -752,7 +770,7 @@ int shmem_secondary_init(Laik_Shmem_Comm* sg, Laik_Inst_Data* idata, Laik_Group*
     shmem_update_comm(sg, world, idata, primarySize, SHM_KEY, rank);
 
 
-    laik_log(1, "Shared Memory Backend: T%d is T%d on Island:%d", world->myid, sg->myid, sg->location);
+    laik_log(2, "Shared Memory Backend: I%d, T%d is T%d on Island:%d", idata->index, world->myid, sg->myid, sg->location);
     return SHMEM_SUCCESS;
 }
 
