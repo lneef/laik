@@ -74,6 +74,7 @@ static int createMetaInfoSeg(Laik_Shmem_Data* sd)
     sd->shmp = shmem_alloc(sizeof(struct commHeader), &sd->headerShmid);
     assert(sd->shmp != (void*)-1);
     sd->shmp->receiver = -1;
+    sd->shmp->barrier = -1;
     sd->cpybuf = (struct cpyBuf) {
         .size = 0,
         .request = 0,
@@ -423,18 +424,21 @@ int shmem_recvMap(Laik_Mapping* map, Laik_Range* range, int sender, Laik_Inst_Da
 int shmem_zeroCopySyncRecv(Laik_Inst_Data* idata, Laik_Group* g)
 {
     Laik_Shmem_Comm* sg = shmem_comm(idata, g);
-    struct commHeader* shmp = sg->headers[0];
+    struct commHeader* shmp = shmem_manager_attach(sg->headershmids[0], 0);
+    laik_log(2, "%d", sg->headershmids[0]);
     while(shmp->receiver >= -1)
     {
 
     }
-
     atomic_fetch_add(&shmp->receiver, 1);
-
     while(atomic_load(&shmp->receiver) != -1)
     {
 
     }
+
+    atomic_fetch_add(&shmp->barrier, 1);
+
+    shmem_manager_detach(shmp);
 
 
     return SHMEM_SUCCESS;
@@ -447,12 +451,18 @@ int shmem_zeroCopySyncSend(Laik_Inst_Data* idata, Laik_Group* g)
     struct commHeader* shmp = sd->shmp;
     int expected = -sg->size;
 
+    atomic_init(&shmp->barrier, expected);
     atomic_init(&shmp->receiver, expected);
     while(atomic_load(&shmp->receiver) != -1)
     {
     }
 
-        return SHMEM_SUCCESS;
+    while(atomic_load(&shmp->barrier) != -1)
+    {
+        
+    }
+        
+    return SHMEM_SUCCESS;
 }
 
 
