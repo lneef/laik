@@ -398,9 +398,9 @@ void laik_shmem_secondary_prepare(Laik_Inst_Data* idata, Laik_ActionSeq *as)
 
     if(zc)
     {   if(sg->myid != 0)
-            laik_shmem_addZeroCopySync(as, LAIK_AT_ShmemZeroCopySyncRecv, 0, 3 * rd + 3, 0, idata->index);
+            laik_shmem_addZeroCopySync(as, LAIK_AT_ShmemZeroCopySyncRecv, 3 * rd + 3, 0, idata->index);
         else
-            laik_shmem_addZeroCopySync(as, LAIK_AT_ShmemZeroCopySyncSend, 0, 3 * rd + 3, 0, idata->index);
+            laik_shmem_addZeroCopySync(as, LAIK_AT_ShmemZeroCopySyncSend, 3 * rd + 3, 0, idata->index);
 
     }
 
@@ -490,15 +490,13 @@ void laik_shmem_secondary_exec(Laik_Inst_Data* idata, Laik_ActionSeq *as)
         case LAIK_AT_ShmemZeroCopySyncSend:
         {
             assert(a->chain_idx == index);
-            Laik_A_ShmemZeroCopySync* aa = (Laik_A_ShmemZeroCopySync*) a;
-            shmem_zeroCopySyncSend(aa->peer, idata, g);
+            shmem_zeroCopySyncSend(idata, g);
             break;
         }
         case LAIK_AT_ShmemZeroCopySyncRecv:
         {
             assert(a->chain_idx == index);
-            Laik_A_ShmemZeroCopySync* aa = (Laik_A_ShmemZeroCopySync*) a;
-            shmem_zeroCopySyncRecv(aa->peer, idata, g);
+            shmem_zeroCopySyncRecv(idata, g);
             break;
         }
         default:
@@ -588,8 +586,7 @@ bool laik_shmem_log_action(Laik_Inst_Data* idata, Laik_ActionSeq* as, Laik_Actio
     case LAIK_AT_ShmemZeroCopySyncRecv:
     case LAIK_AT_ShmemZeroCopySyncSend:
     {
-        Laik_A_ShmemZeroCopySync* aa = (Laik_A_ShmemZeroCopySync*) a;
-        laik_log_append("ShmemZeroCopySync with T%d", aa->peer);
+        laik_log_append("ShmemZeroCopySync");
         break;
     }
     default:

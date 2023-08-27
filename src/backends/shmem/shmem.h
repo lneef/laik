@@ -145,9 +145,9 @@ int shmem_sendPack(Laik_Mapping* map, Laik_Range* range, int receiver, Laik_Inst
 
 int shmem_recvReduce(Laik_Mapping* map, Laik_Range* range, Laik_Data* data, int sender, Laik_Inst_Data* idata, Laik_Group* g, Laik_ReductionOperation redOp);
 
-int shmem_zeroCopySyncSend(int receiver, Laik_Inst_Data* idata, Laik_Group* g);
+int shmem_zeroCopySyncSend(Laik_Inst_Data* idata, Laik_Group* g);
 
-int shmem_zeroCopySyncRecv(int sender, Laik_Inst_Data* idata, Laik_Group* g);
+int shmem_zeroCopySyncRecv(Laik_Inst_Data* idata, Laik_Group* g);
 
 //------------------------------------------------------------------------------
 // copy buffer management and subgroup handling

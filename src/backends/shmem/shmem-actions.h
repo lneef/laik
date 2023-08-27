@@ -86,12 +86,6 @@ typedef struct
     Laik_Range* range;
 } Laik_A_ShmemCopyToBuf;
 
-typedef struct
-{
-    Laik_Action h;
-    int peer;
-} Laik_A_ShmemZeroCopySync;
-
 typedef struct 
 {
     Laik_Action h;
@@ -150,7 +144,7 @@ void laik_shmem_addTwoCopyMap(Laik_ActionSeq* as, Laik_Range* range, int mapNo, 
 
 void laik_shmem_addOneCopyMap(Laik_ActionSeq* as, int mapNo, int shmid, int receiver, int round, int tid, int chain_idx);
 
-void laik_shmem_addZeroCopySync(Laik_ActionSeq* as, int type, int receiver, int round, int tid, int chain_idx);
+void laik_shmem_addZeroCopySync(Laik_ActionSeq* as, int type, int round, int tid, int chain_idx);
 
 
 //---------------------------------------------------------------------

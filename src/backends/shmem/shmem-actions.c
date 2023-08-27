@@ -1,6 +1,7 @@
 
 #include "shmem-actions.h"
 #include "backends/shmem/shmem-manager.h"
+#include "laik/action.h"
 #include "shmem.h"
 
 #include <laik-internal.h>
@@ -106,12 +107,11 @@ void laik_shmem_addOneCopyMap(Laik_ActionSeq* as, int mapNo, int shmid, int rece
     a->to_rank = receiver;
 }
 
-void laik_shmem_addZeroCopySync(Laik_ActionSeq* as, int type, int receiver, int round, int tid, int chain_idx)
+void laik_shmem_addZeroCopySync(Laik_ActionSeq* as, int type, int round, int tid, int chain_idx)
 {
-    Laik_A_ShmemZeroCopySync* a;
-    a = (Laik_A_ShmemZeroCopySync*) laik_aseq_addAction(as, sizeof(*a), type, round, tid);
-    a->h.chain_idx = chain_idx;
-    a->peer = receiver;
+    Laik_Action* a;
+    a = laik_aseq_addAction(as, sizeof(*a), type, round, tid);
+    a->chain_idx = chain_idx;
 }
 
 void laik_shmem_exec_TwoCopyMap(Laik_Action* a, Laik_TransitionContext* tc, Laik_Inst_Data* idata)
