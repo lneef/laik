@@ -168,7 +168,6 @@ bool shmem_replace_MapPackAndSend(Laik_ActionSeq* as, Laik_Action* a, Laik_Trans
         {
             if(shmem_manager_zeroCopy(m->header) && sd->copyScheme == 0)
             {
-                laik_shmem_addZeroCopySync(as, LAIK_AT_ShmemZeroCopySyncSend, aa->to_rank, rd, a->tid, chain_idx);
                 return true;
             }
             //was allocated using shmem allocator
@@ -200,7 +199,6 @@ _Bool shmem_replace_MapRecvAndUnpack(Laik_ActionSeq* as, Laik_Action* a, Laik_Tr
         if(is_shmem_allocator(m->allocator) && shmem_manager_zeroCopy(m->header))
         {
 
-            laik_shmem_addZeroCopySync(as, LAIK_AT_ShmemZeroCopySyncRecv, aa->from_rank, 3 * a->round, a->tid, chain_idx);
             return true;
         }
     }
@@ -396,11 +394,8 @@ void laik_shmem_secondary_prepare(Laik_Inst_Data* idata, Laik_ActionSeq *as)
         if(!ret)
             laik_aseq_add(a, as, 3 * a->round);
 
-
-        
     }
 
-    /*
     if(zc)
     {   if(sg->myid != 0)
             laik_shmem_addZeroCopySync(as, LAIK_AT_ShmemZeroCopySyncRecv, 0, 3 * rd + 3, 0, idata->index);
@@ -408,7 +403,6 @@ void laik_shmem_secondary_prepare(Laik_Inst_Data* idata, Laik_ActionSeq *as)
             laik_shmem_addZeroCopySync(as, LAIK_AT_ShmemZeroCopySyncSend, 0, 3 * rd + 3, 0, idata->index);
 
     }
-    */
 
     shmem_cpybuf_alloc_requested(&sd->cpybuf);
     laik_aseq_addReturnToPrimary(as, maxround);
