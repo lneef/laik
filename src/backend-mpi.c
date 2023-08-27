@@ -328,7 +328,7 @@ struct timespec start, end;
 //----------------------------------------------------------------------------
 // backend interface implementation: initialization
 
-double t1, t2;
+struct timespec start,end;
 Laik_Instance *laik_init_mpi(int *argc, char ***argv)
 {
     clock_gettime(CLOCK_MONOTONIC, &start);
@@ -428,7 +428,6 @@ Laik_Instance *laik_init_mpi(int *argc, char ***argv)
     inst->inst_data->recv = recvIntegersMPI;
 
     mpi_instance = inst;
-    t1 = MPI_Wtime();
     return inst;
 }
 

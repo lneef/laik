@@ -126,7 +126,6 @@ static void shmem_parse_affinity_mask(Laik_Shmem_Data* sd)
 
         if(!CPU_EQUAL_S(size, mask, zero))
         {
-            laik_log(2, "%d", set);
             sd->set = set;
             CPU_FREE(mine);
             CPU_FREE(zero);
@@ -351,14 +350,16 @@ int shmem_sendMap(Laik_Mapping* map, Laik_Range* range, int receiver, Laik_Inst_
 int shmem_sendPack(Laik_Mapping* map, Laik_Range* range, int receiver,  Laik_Inst_Data* idata){   
     Laik_Shmem_Data* sd = idata->backend_data;
     size_t count = laik_range_size(range);
+    laik_log(2, "%lu", count);
     shmem_cpybuf_alloc(&sd->cpybuf, count * map->data->elemsize + map->layout->header_size);
-    Laik_Mapping tmp;
-    tmp.data = map->data;
+    Laik_Mapping tmp = *map;
+    laik_log(2, "%lu", sd->cpybuf.size);
+    laik_log(2, "%p", sd->cpybuf.ptr);
     tmp.start = tmp.base = (char*)sd->cpybuf.ptr + map->layout->header_size;
+    tmp.header = sd->cpybuf.ptr;
     Laik_Data* data = map->data;
     Laik_Layout* ll = data->layout_factory(1, range);
     tmp.layout = ll;
-    tmp.header = sd->cpybuf.ptr;
     tmp.layoutSection = tmp.mapNo = 0;
     ll->init(&tmp, sd->cpybuf.ptr, 0);
     
@@ -398,7 +399,7 @@ static void shmem_tmpMap(Laik_Mapping* tmp, Laik_Range* range, char* ptr, Laik_M
 
 int shmem_recvMap(Laik_Mapping* map, Laik_Range* range, int sender, Laik_Inst_Data* idata, Laik_Group* g)
 {
-    int shmid, ret = SHMEM_FAILURE;
+    int shmid;
     Laik_Shmem_Comm* sg = shmem_comm(idata, g);
     shmid = sg->headershmids[sender];
     struct commHeader* shmp = shmem_manager_attach(shmid, 0);
@@ -419,7 +420,7 @@ int shmem_recvMap(Laik_Mapping* map, Laik_Range* range, int sender, Laik_Inst_Da
     shmem_manager_detach((char*)shmp);
     shmem_manager_detach(ptr);
 
-    return ret;
+    return SHMEM_SUCCESS;
 }
 
 int shmem_zeroCopySyncRecv(int sender, Laik_Inst_Data* idata, Laik_Group* g)
@@ -693,7 +694,7 @@ int shmem_update_comm(Laik_Shmem_Comm* sg, Laik_Group* g, Laik_Inst_Data* idata,
 
 int shmem_init_comm(Laik_Shmem_Comm *sg, Laik_Group *g, Laik_Inst_Data *idata, int rank, int size)
 {
-    return shmem_update_comm(sg, g, idata,size, SHM_RESIZE_KEY, rank);
+    return shmem_update_comm(sg, g, idata,size, SHM_KEY, rank);
 }
 
 static char* saveptrR;

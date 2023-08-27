@@ -231,7 +231,8 @@ void copy_lex(Laik_Range* range,
             fromOff, fromPtr, toOff, toPtr);
     }
 
-   
+    laik_log(2, "start");
+
     for(int64_t i3 = 0; i3 < count.i[2]; i3++) {
         char *fromPtr2 = fromPtr;
         char *toPtr2 = toPtr;

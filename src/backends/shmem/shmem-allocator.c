@@ -175,10 +175,12 @@ void* shmem_key_alloc(int key, size_t size, int* shimdPtr)
 
 void* shmem_alloc(size_t size, int* shimdPtr)
 {
-    int shmid = shmem_shmid(IPC_PRIVATE, size, IPC_CREAT | IPC_EXCL | 0644);
+    size_t header_size = PAD(HEADER_SIZE, HEADER_PAD);
+    size_t alloc_size = size + header_size;
+    int shmid = shmget(IPC_PRIVATE, alloc_size, 0644 | IPC_CREAT | IPC_EXCL);
     if (shmid == -1)
     {   
-        laik_panic("def_shmem_malloc couldn't create the shared memory segment: shmid == -1");
+        laik_panic(strerror(errno));
         return NULL;
     }
     
@@ -189,18 +191,17 @@ void* shmem_alloc(size_t size, int* shimdPtr)
         laik_panic("def_shmem_malloc couldn't attach to the shared memory segment");
         return NULL;
     }
-    size_t header_size = PAD(HEADER_SIZE, HEADER_PAD);
+
     struct shmSeg* seg = malloc(sizeof(struct shmSeg));
     seg -> ptr = ptr;
-    seg -> size = size + header_size;
+    seg -> size = alloc_size;
     seg -> shmid = shmid;
     register_shmSeg(seg);
 
     *shimdPtr = shmid;
 
     ptr -> shmid = shmid;
-    ptr -> size = size + header_size;
-    atomic_init(&ptr->z, false);
+    ptr -> size = alloc_size;
 
     return ((char*)ptr) + header_size;
 }
