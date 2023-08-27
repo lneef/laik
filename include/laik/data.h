@@ -423,7 +423,7 @@ typedef enum _Laik_MemoryPolicy {
 typedef void* (*Laik_malloc_t)(Laik_Data*, Laik_Layout* l, Laik_Range* range, Laik_Partitioning* toP);
 typedef void  (*Laik_free_t)(Laik_Data*, Laik_Mapping*);
 typedef void* (*Laik_realloc_t)(Laik_Data*, void*, size_t);
-typedef bool (*Laik_alloc_reuse)(Laik_Data* data, Laik_Mapping*);
+typedef bool (*Laik_alloc_reuse)(Laik_Data*, Laik_Partitioning* toP, Laik_Mapping*);
 
 typedef struct _Laik_Allocator Laik_Allocator;
 struct _Laik_Allocator {

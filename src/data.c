@@ -336,11 +336,15 @@ Laik_Range* coveringRanges(int n, Laik_RangeList* list, int myid)
         unsigned int firstOff = o;
         assert(mapNo == list->trange[o].mapNo);
         Laik_Range* range = &(ranges[mapNo]);
+        laik_log(2, "%d", list->trange[o].task);
 
         // range covering all task ranges for a given map number
         *range = list->trange[o].range;
+        laik_log_Range(range);
+        laik_log_flush(0);
         while((o+1 < list->off[myid+1]) && (list->trange[o+1].mapNo == mapNo)) {
             o++;
+            laik_log(2, "%d", list->trange[o].task);
             laik_range_expand(range, &(list->trange[o].range));
         }
 
@@ -665,7 +669,7 @@ void initEmbeddedMapping(Laik_Mapping* toMap, Laik_Mapping* fromMap)
 // and if old mapping covers all indexes needed in new mapping.
 // If no allocator is set, memory must be reusable
 static
-void checkMapReuse(Laik_MappingList* toList, Laik_MappingList* fromList)
+void checkMapReuse(Laik_MappingList* toList, Laik_MappingList* fromList, Laik_Partitioning* toP)
 {
     // reuse only possible if old mappings exist
     if ((fromList == 0) || (fromList->count ==0)) return;
@@ -689,7 +693,7 @@ void checkMapReuse(Laik_MappingList* toList, Laik_MappingList* fromList)
             fromMap = &(fromList->map[sNo]);
             if (fromMap->base == 0) continue;
             if (fromMap->reusedFor >= 0) continue; // only reuse once
-            if (fromMap->allocator->check && ! fromMap->allocator->check(toMap->data, fromMap)) continue;
+            if (fromMap->allocator->check && !fromMap->allocator->check(toMap->data, toP, fromMap)) continue;
 
             // does new mapping fit into old?
             bool reuse = (toList->layout->reuse)(toList->layout, i, fromList->layout, sNo);
@@ -835,7 +839,7 @@ void doTransition(Laik_Data* d, Laik_Transition* t, Laik_ActionSeq* as,
     // thus it is bad to reuse a mapping for different index ranges.
     // but reusing mappings such that same indexes go to same address
     // is fine.
-    checkMapReuse(toList, fromList);
+    checkMapReuse(toList, fromList, t->toPartitioning);
 
     // allocate space for mappings for which reuse is not possible
     allocateMappings(toList, d->stat, toP);
@@ -1448,7 +1452,7 @@ char* laik_get_map_addr(Laik_Data* d, int n, Laik_Index* idx)
     if (!m) return 0;
 
     int64_t off = laik_offset(m->layout, m->layoutSection, idx);
-    return m->base + off * d->elemsize;
+    return m->start + off * d->elemsize;
 }
 
 

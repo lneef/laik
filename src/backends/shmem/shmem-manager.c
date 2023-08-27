@@ -121,8 +121,12 @@ void* def_shmem_malloc(Laik_Data* d, Laik_Layout* ll, Laik_Range* range, Laik_Pa
     for(unsigned i = 0; i < rl->count; ++i)
     {
         if(sg->libLocations[rl->trange[i].task] == 0) continue;
+        laik_log_Range(&alloc_range);
+        laik_log_flush(0);
         laik_range_expand(&alloc_range, &rl->trange[i].range);
     }
+    laik_log_Range(&alloc_range);
+    laik_log_flush(0);
     if(laik_range_isEqual(range, &alloc_range))
     {
         size_t size = laik_range_size(range) * d->elemsize;
@@ -132,20 +136,19 @@ void* def_shmem_malloc(Laik_Data* d, Laik_Layout* ll, Laik_Range* range, Laik_Pa
     size += ll->header_size;
     *range = alloc_range;
     int mask = pair(sg->zcloc, current++);
-    laik_log(2, "%d", mask);
+    laik_log(2, "mask%d", mask);
     void* ptr = shmem_key_alloc(KEY_OFFSET + mask, size, &shmid);
     return ptr;
 }
 
-bool allow_reuse(Laik_Data* data, Laik_Mapping* m)
+bool allow_reuse(Laik_Data* data, Laik_Partitioning* toP, Laik_Mapping* m)
 {
     Laik_Inst_Data* idata = data->backend_data;
     Laik_Shmem_Data* sd = idata->backend_data;
     if(sd->copyScheme > 0) return true;
     Laik_Shmem_Comm* sg = data->activePartitioning->group->backend_data[idata->index];
 
-    Laik_Partitioning* p = m->data->activePartitioning;
-    Laik_RangeList* rl = laik_partitioning_allranges(p);
+    Laik_RangeList* rl = laik_partitioning_myranges(toP);
 
     laik_log_Range(&m->allocatedRange);
     laik_log_flush(0);
