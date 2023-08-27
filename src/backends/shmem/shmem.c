@@ -350,11 +350,8 @@ int shmem_sendMap(Laik_Mapping* map, Laik_Range* range, int receiver, Laik_Inst_
 int shmem_sendPack(Laik_Mapping* map, Laik_Range* range, int receiver,  Laik_Inst_Data* idata){   
     Laik_Shmem_Data* sd = idata->backend_data;
     size_t count = laik_range_size(range);
-    laik_log(2, "%lu", count);
     shmem_cpybuf_alloc(&sd->cpybuf, count * map->data->elemsize + map->layout->header_size);
     Laik_Mapping tmp = *map;
-    laik_log(2, "%lu", sd->cpybuf.size);
-    laik_log(2, "%p", sd->cpybuf.ptr);
     tmp.start = tmp.base = (char*)sd->cpybuf.ptr + map->layout->header_size;
     tmp.header = sd->cpybuf.ptr;
     Laik_Data* data = map->data;

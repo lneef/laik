@@ -135,10 +135,6 @@ void* shmem_key_alloc(int key, size_t size, int* shimdPtr)
     size_t header_size = PAD(HEADER_SIZE, HEADER_PAD);
     size_t alloc_size = size + header_size;
 
-    laik_log(2, "%x", key);
-    laik_log(2, "hhnh");
-    laik_log_flush(0);
-
     int shmid = shmem_shmid(key, alloc_size, IPC_CREAT | IPC_EXCL | 0644);
     if (shmid == -1)
     {   
