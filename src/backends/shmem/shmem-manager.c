@@ -107,6 +107,7 @@ void* def_shmem_malloc(Laik_Data* d, Laik_Layout* ll, Laik_Range* range, Laik_Pa
     Laik_RangeList* rl = laik_partitioning_allranges(par);
     assert(rl);
     //empty range
+    bool didinit = false;
     Laik_Range alloc_range = {
         .space = d->space,
         .from = { {0} },
@@ -123,7 +124,15 @@ void* def_shmem_malloc(Laik_Data* d, Laik_Layout* ll, Laik_Range* range, Laik_Pa
         if(sg->libLocations[rl->trange[i].task] == 0) continue;
         laik_log_Range(&alloc_range);
         laik_log_flush(0);
-        laik_range_expand(&alloc_range, &rl->trange[i].range);
+        if(!didinit)
+        {
+            alloc_range = rl->trange[i].range;
+            didinit = true;
+        }
+        else
+        {
+            laik_range_expand(&alloc_range, &rl->trange[i].range);
+        }
     }
     laik_log_Range(&alloc_range);
     laik_log_flush(0);

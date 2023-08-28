@@ -113,7 +113,7 @@ int64_t offset_lex(Laik_Layout* l, int n, Laik_Index* idx)
     int dims = l->dims;
     assert((n >= 0) && (n < l->map_count));
     Lex_Entry* e = &(ll->e[n]);
-
+    laik_log(2, "%lu", e->hd->stride[1]);
     int64_t off = idx->i[0] - e->range.from.i[0];
     if (dims > 1) {
         off += (idx->i[1] - e->range.from.i[1]) * e->hd->stride[1];
@@ -234,8 +234,6 @@ void copy_lex(Laik_Range* range,
         laik_log_flush("local off %lu (ptr %p) => %lu (ptr %p)",
             fromOff, fromPtr, toOff, toPtr);
     }
-
-    laik_log(2, "start");
 
     for(int64_t i3 = 0; i3 < count.i[2]; i3++) {
         char *fromPtr2 = fromPtr;

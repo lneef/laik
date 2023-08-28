@@ -25,6 +25,7 @@
 #include "backends/shmem/shmem-actions.h"
 #include "laik/action-internal.h"
 #include "laik/action.h"
+#include "laik/space.h"
 
 #include <assert.h>
 #include <bits/time.h>
@@ -414,6 +415,7 @@ void laik_shmem_secondary_exec(Laik_Inst_Data* idata, Laik_ActionSeq *as)
 {
     
     Laik_TransitionContext *tc = as->context[0];
+    Laik_Transition* t = tc->transition;
     Laik_Group* g = tc->transition->group;
     unsigned int index = idata->index;
 
@@ -490,13 +492,13 @@ void laik_shmem_secondary_exec(Laik_Inst_Data* idata, Laik_ActionSeq *as)
         case LAIK_AT_ShmemZeroCopySyncSend:
         {
             assert(a->chain_idx == index);
-            shmem_zeroCopySyncSend(idata, g);
+            shmem_zeroCopySyncSend(idata, g, tc);
             break;
         }
         case LAIK_AT_ShmemZeroCopySyncRecv:
         {
             assert(a->chain_idx == index);
-            shmem_zeroCopySyncRecv(idata, g);
+            shmem_zeroCopySyncRecv(idata, g, tc);
             break;
         }
         default:

@@ -262,6 +262,11 @@ int64_t laik_maplocal2global_1d(Laik_Data* d, int mapNo, uint64_t li);
 // return the mapping number of a <map> in the MappingList
 int laik_map_get_mapNo(const Laik_Mapping* map);
 
+// local copies
+void   copyMaps(Laik_Transition* t,
+              Laik_MappingList* toList, Laik_MappingList* fromList,
+              Laik_SwitchStat* ss);
+
 // 2d global to 2d local
 // if global coordinate (gx/gy) is in local mapping, set output parameters
 //  (lx/ly) and return mapping, otherwise return false

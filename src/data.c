@@ -580,8 +580,8 @@ void laik_data_copy(Laik_Range* range,
     laik_layout_copy_gen(range, from, to);
 }
 
-static
-void    copyMaps(Laik_Transition* t,
+
+void copyMaps(Laik_Transition* t,
               Laik_MappingList* toList, Laik_MappingList* fromList,
               Laik_SwitchStat* ss)
 {

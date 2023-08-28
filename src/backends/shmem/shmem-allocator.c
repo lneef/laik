@@ -209,6 +209,9 @@ void shmem_free_zero_copy(Laik_Data* data, struct shmHeader* sh)
     Laik_Shmem_Comm* sg = g->backend_data[idata->index];
     int myid = sg->myid;
     int shmid = sh->shmid;
+    struct shmid_ds ds;
+
+    shmctl(shmid, IPC_STAT, &ds);
 
     if(myid == 0)
     {
@@ -218,7 +221,9 @@ void shmem_free_zero_copy(Laik_Data* data, struct shmHeader* sh)
         
     }else {
         shmdt(sh);
+
     }
+
 
     release(shmid);
 }

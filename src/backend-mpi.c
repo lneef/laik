@@ -22,6 +22,7 @@
 #include "laik-backend-mpi.h"
 #include "laik/action.h"
 #include "laik/backend.h"
+#include "laik/core.h"
 
 #include <laik.h>
 #include <assert.h>
@@ -742,6 +743,8 @@ static void laik_mpi_exec_groupReduce(Laik_TransitionContext *tc,
         bufOff[ii++] = off;
         err = MPI_Recv(packbuf + off, (int)a->count, dataType,
                        inTask, 1, comm, &st);
+        double val = *(double*)packbuf + off;
+        laik_log(2, "%f", val);
         if (err != MPI_SUCCESS)
             laik_mpi_panic(err);
         // check that we received the expected number of elements

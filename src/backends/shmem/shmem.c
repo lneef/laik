@@ -421,11 +421,18 @@ int shmem_recvMap(Laik_Mapping* map, Laik_Range* range, int sender, Laik_Inst_Da
     return SHMEM_SUCCESS;
 }
 
-int shmem_zeroCopySyncRecv(Laik_Inst_Data* idata, Laik_Group* g)
+int shmem_zeroCopySyncRecv(Laik_Inst_Data* idata, Laik_Group* g, Laik_TransitionContext* tc)
 {
     Laik_Shmem_Comm* sg = shmem_comm(idata, g);
     struct commHeader* shmp = shmem_manager_attach(sg->headershmids[0], 0);
-    laik_log(2, "%d", sg->headershmids[0]);
+    Laik_Transition* t = tc->transition;
+    Laik_Data* d = tc->data;
+
+    if (t->localCount > 0)
+        copyMaps(t, tc->toList, tc->fromList, d->stat);
+    t->localCount = 0;
+
+
     while(shmp->receiver >= -1)
     {
 
@@ -435,7 +442,7 @@ int shmem_zeroCopySyncRecv(Laik_Inst_Data* idata, Laik_Group* g)
     {
 
     }
-
+    
     atomic_fetch_add(&shmp->barrier, 1);
 
     shmem_manager_detach(shmp);
@@ -444,15 +451,23 @@ int shmem_zeroCopySyncRecv(Laik_Inst_Data* idata, Laik_Group* g)
     return SHMEM_SUCCESS;
 }
 
-int shmem_zeroCopySyncSend(Laik_Inst_Data* idata, Laik_Group* g)
+int shmem_zeroCopySyncSend(Laik_Inst_Data* idata, Laik_Group* g, Laik_TransitionContext* tc)
 {
     Laik_Shmem_Data* sd = idata->backend_data;
     Laik_Shmem_Comm* sg = shmem_comm(idata, g);
     struct commHeader* shmp = sd->shmp;
+    Laik_Transition* t = tc->transition;
+    Laik_Data* d = tc->data;
+    
+    if (t->localCount > 0)
+        copyMaps(t, tc->toList, tc->fromList, d->stat);
+    t -> localCount = 0;
+    
     int expected = -sg->size;
 
     atomic_init(&shmp->barrier, expected);
     atomic_init(&shmp->receiver, expected);
+    
     while(atomic_load(&shmp->receiver) != -1)
     {
     }
@@ -461,6 +476,8 @@ int shmem_zeroCopySyncSend(Laik_Inst_Data* idata, Laik_Group* g)
     {
         
     }
+    
+   
         
     return SHMEM_SUCCESS;
 }
