@@ -78,7 +78,7 @@ void def_shmem_free(Laik_Data* d, Laik_Mapping* map){
     size_t header_size = PAD(HEADER_SIZE, HEADER_PAD);
     struct shmHeader* sh = (struct shmHeader*) (map->header - header_size);
     if(atomic_load(&sh->z)){
-        shmem_free_zero_copy(d, sh);
+        shmem_free_zero_copy(sh);
     }else {
         shmem_free(map->header);
     }
@@ -122,8 +122,6 @@ void* def_shmem_malloc(Laik_Data* d, Laik_Layout* ll, Laik_Range* range, Laik_Pa
     for(unsigned i = 0; i < rl->count; ++i)
     {
         if(sg->libLocations[rl->trange[i].task] == 0) continue;
-        laik_log_Range(&alloc_range);
-        laik_log_flush(0);
         if(!didinit)
         {
             alloc_range = rl->trange[i].range;
@@ -134,6 +132,8 @@ void* def_shmem_malloc(Laik_Data* d, Laik_Layout* ll, Laik_Range* range, Laik_Pa
             laik_range_expand(&alloc_range, &rl->trange[i].range);
         }
     }
+
+    laik_log(1, "Range to be allocated:");
     laik_log_Range(&alloc_range);
     laik_log_flush(0);
     if(laik_range_isEqual(range, &alloc_range))
@@ -145,7 +145,6 @@ void* def_shmem_malloc(Laik_Data* d, Laik_Layout* ll, Laik_Range* range, Laik_Pa
     size += ll->header_size;
     *range = alloc_range;
     int mask = pair(sg->zcloc, current++);
-    laik_log(2, "mask%d", mask);
     void* ptr = shmem_key_alloc(KEY_OFFSET + mask, size, &shmid);
     return ptr;
 }

@@ -22,6 +22,7 @@ struct shmSeg
     void* ptr;
     int shmid;
     int size;
+    bool created;
     struct shmSeg *next;
 };
 
@@ -57,7 +58,7 @@ static int get_shmid_and_destroy(void *ptr, int *shmid)
     return SHMEM_SEGMENT_NOT_FOUND;
 }
 
-static int release(int shmid)
+static bool release(int shmid)
 {
     struct shmSeg* next;
     struct shmSeg* current = &shmList;
@@ -68,14 +69,16 @@ static int release(int shmid)
         if(shmid == next->shmid)
         {
             current->next = next->next;
+            bool created = next->created;
             free(next);
-            return SHMEM_SUCCESS;
+            return created;
         }
 
         current = current->next;
     }
 
-    return SHMEM_SEGMENT_NOT_FOUND;
+    laik_log(LAIK_LL_Error, "Shmid %d not found", shmid);
+    return false;
 }
 
 void deleteAllocatedSegments(){
@@ -134,10 +137,12 @@ void* shmem_key_alloc(int key, size_t size, int* shimdPtr)
     struct shmSeg* seg = malloc(sizeof(struct shmSeg));
     size_t header_size = PAD(HEADER_SIZE, HEADER_PAD);
     size_t alloc_size = size + header_size;
+    bool created = true;
 
     int shmid = shmem_shmid(key, alloc_size, IPC_CREAT | IPC_EXCL | 0644);
     if (shmid == -1)
-    {   
+    {  
+        created = false;
         shmid = shmem_shmid(key, alloc_size, 0644);
     }
 
@@ -158,6 +163,7 @@ void* shmem_key_alloc(int key, size_t size, int* shimdPtr)
     seg -> ptr = ptr;
     seg -> size = alloc_size;
     seg -> shmid = shmid;
+    seg -> created = created;
     register_shmSeg(seg);
 
     *shimdPtr = shmid;
@@ -202,18 +208,12 @@ void* shmem_alloc(size_t size, int* shimdPtr)
     return ((char*)ptr) + header_size;
 }
 
-void shmem_free_zero_copy(Laik_Data* data, struct shmHeader* sh)
+void shmem_free_zero_copy(struct shmHeader* sh)
 {
-    Laik_Group* g = data->activePartitioning->group;
-    Laik_Inst_Data* idata = data->backend_data;
-    Laik_Shmem_Comm* sg = g->backend_data[idata->index];
-    int myid = sg->myid;
     int shmid = sh->shmid;
-    struct shmid_ds ds;
+    bool created = release(shmid);
 
-    shmctl(shmid, IPC_STAT, &ds);
-
-    if(myid == 0)
+    if(created)
     {
         shmdt(sh);
 
@@ -224,8 +224,6 @@ void shmem_free_zero_copy(Laik_Data* data, struct shmHeader* sh)
 
     }
 
-
-    release(shmid);
 }
 
 

@@ -415,7 +415,6 @@ void laik_shmem_secondary_exec(Laik_Inst_Data* idata, Laik_ActionSeq *as)
 {
     
     Laik_TransitionContext *tc = as->context[0];
-    Laik_Transition* t = tc->transition;
     Laik_Group* g = tc->transition->group;
     unsigned int index = idata->index;
 

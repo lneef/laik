@@ -40,7 +40,7 @@ void* shmem_alloc(size_t size, int* shimdPtr);
 
 void* shmem_key_alloc(int key, size_t size, int* shimdPtr);
 
-void shmem_free_zero_copy(Laik_Data* data, struct shmHeader* sh);
+void shmem_free_zero_copy(struct shmHeader* sh);
 
 void cleanup(void);
 
