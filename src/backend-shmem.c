@@ -167,7 +167,7 @@ bool shmem_replace_MapPackAndSend(Laik_ActionSeq* as, Laik_Action* a, Laik_Trans
         Laik_Mapping* m = &tc->fromList->map[aa->fromMapNo];     
         if(is_shmem_allocator(m->allocator) && sd->copyScheme != 2)
         {
-            if(shmem_manager_zeroCopy(m->header) && sd->copyScheme == 0)
+            if(shmem_manager_zeroCopy(m->header) && sd->copyScheme == 0 && tc->toList)
             {
                 return true;
             }
