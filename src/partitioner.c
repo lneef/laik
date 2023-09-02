@@ -16,6 +16,7 @@
  */
 
 #include "laik-internal.h"
+#include "laik/space.h"
 
 #include <assert.h>
 #include <stdint.h>
@@ -365,6 +366,40 @@ Laik_Partitioner* laik_new_halo_partitioner(int depth)
     return laik_new_partitioner("halo", runHaloPartitioner, data, 0);
 }
 
+// blockwise partitioner for two dimensions to test one copy scheme
+
+static void partition_2d(Laik_RangeReceiver* r, Laik_PartitionerParams* p)
+{
+    int size = p->group->size;
+    Laik_Range* s = &p->space->range;
+    Laik_Range rr = {
+        .space = s->space,
+        .from = s->from,
+        .to = s->to
+    };
+
+    int ylen = (s->to.i[1] - s->from.i[1]) / size;
+    int highest = size - 1;
+
+    for(int i = 0; i < highest; ++i)
+    {
+        int begin = i * ylen;
+        int end = (i + 1) * ylen;
+        rr.from.i[1] = begin;
+        rr.to.i[1] = end;
+        laik_append_range(r, i, &rr, 1, 0);
+
+    }
+
+    int end = size * ylen;
+    end = end != s->to.i[1] ? s->to.i[1] : end;
+    rr.from.i[1] = highest * ylen;
+    rr.to.i[1] = end;
+    laik_append_range(r, highest, &rr, 1, 0);
+    
+    return;
+}
+
 
 // bisection partitioner
 
@@ -372,8 +407,7 @@ Laik_Partitioner* laik_new_halo_partitioner(int depth)
 static void doBisection(Laik_RangeReceiver* r, Laik_PartitionerParams* p,
                         Laik_Range* s, int fromTask, int toTask)
 {
-    int tag = 1; // TODO: make it a parameter
-
+    int tag  = 1; // TODO: make it a parameter
     assert(toTask > fromTask);
     if (toTask - fromTask == 1) {
         laik_append_range(r, fromTask, s, tag, 0);
@@ -422,6 +456,11 @@ void runBisectionPartitioner(Laik_RangeReceiver* r, Laik_PartitionerParams* p)
 Laik_Partitioner* laik_new_bisection_partitioner()
 {
     return laik_new_partitioner("bisection", runBisectionPartitioner, 0, 0);
+}
+
+Laik_Partitioner* laik_new_block_2d_partitioner()
+{
+    return laik_new_partitioner("block2d", partition_2d, 0, 0);
 }
 
 

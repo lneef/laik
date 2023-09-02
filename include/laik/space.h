@@ -499,6 +499,7 @@ Laik_Partitioner* laik_new_halo_partitioner(int depth);
 Laik_Partitioner* laik_new_bisection_partitioner(void);
 Laik_Partitioner* laik_new_grid_partitioner(int xblocks, int yblocks,
                                             int zblocks);
+Laik_Partitioner* laik_new_block_2d_partitioner(void);
 
 // block partitioner
 typedef double (*Laik_GetIdxWeight_t)(Laik_Index*, const void* userData);

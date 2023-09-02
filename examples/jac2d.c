@@ -18,6 +18,7 @@
  * 2d Jacobi example.
  */
 
+#include "laik/space.h"
 #include <laik.h>
 
 #include <stdio.h>
@@ -139,7 +140,8 @@ int main(int argc, char* argv[])
     // - prWrite: cells to update (disjunctive partitioning)
     // - prRead : extends partitionings by haloes, to read neighbor values
     Laik_Partitioner *prWrite, *prRead;
-    prWrite = laik_new_bisection_partitioner();
+    //prWrite = laik_new_bisection_partitioner();
+    prWrite = laik_new_block_2d_partitioner();
     prRead = use_cornerhalo ? laik_new_cornerhalo_partitioner(1) :
                               laik_new_halo_partitioner(1);
 
