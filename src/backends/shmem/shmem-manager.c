@@ -97,11 +97,11 @@ void* def_shmem_malloc(Laik_Data* d, Laik_Layout* ll, Laik_Range* range, Laik_Pa
     int shmid;
     Laik_Inst_Data* idata = d->backend_data;
     // if zero copy not possible, dont allow it
-
+    size_t size = ll->header_size;
     Laik_Shmem_Data* sd = idata->backend_data;
     if(sd->copyScheme != 0)
     {
-        size_t size = laik_range_size(range) * d->elemsize;
+        size += laik_range_size(range) * d->elemsize;
         return shmem_alloc(size, &shmid);
     }
     Laik_RangeList* rl = laik_partitioning_allranges(par);
@@ -136,13 +136,13 @@ void* def_shmem_malloc(Laik_Data* d, Laik_Layout* ll, Laik_Range* range, Laik_Pa
     laik_log(1, "Range to be allocated:");
     laik_log_Range(&alloc_range);
     laik_log_flush(0);
+    
     if(laik_range_isEqual(range, &alloc_range))
     {
-        size_t size = laik_range_size(range) * d->elemsize;
+        size += laik_range_size(range) * d->elemsize;
         return shmem_alloc(size, &shmid);
     }
-    size_t size = laik_range_size(&alloc_range) * d ->elemsize;
-    size += ll->header_size;
+    size += laik_range_size(&alloc_range) * d ->elemsize;
     *range = alloc_range;
     int mask = pair(sg->zcloc, current++);
     void* ptr = shmem_key_alloc(KEY_OFFSET + mask, size, &shmid);

@@ -757,16 +757,15 @@ int shmem_secondary_init(Laik_Shmem_Comm* sg, Laik_Inst_Data* idata, Laik_Group*
         copyToken = strtok_r(NULL, ",", &saveptrC);
     }
 
-    laik_log(2, "%s", copyToken);
 
-    if(copyToken != 0 && !strcmp(copyToken, "2"))
+    if(copyToken == 0 || !strcmp(copyToken, "2"))
     {
         sd->copyScheme = 2;
     }
-    else if(copyToken != 0 && !strcmp(copyToken, "1"))
+    else if(!strcmp(copyToken, "1"))
     {
         sd->copyScheme = 1;
-    }else if (!copyToken || !strcmp(copyToken, "0")) {
+    }else if (!strcmp(copyToken, "0")) {
 
         sd->copyScheme = 0;
     }

@@ -519,6 +519,8 @@ void laik_map_set_allocation(Laik_Mapping* m,
     // make sure provided memory buffer is large enough
     assert(size >=  m->count * m->data->elemsize);
 
+    if(a == NULL) m->allocatedRange = m->requiredRange;
+
     // allocated size/count is same as size/count of required range
     m->allocCount = laik_range_size(&m->allocatedRange);
 
@@ -693,7 +695,7 @@ void checkMapReuse(Laik_MappingList* toList, Laik_MappingList* fromList, Laik_Pa
             fromMap = &(fromList->map[sNo]);
             if (fromMap->base == 0) continue;
             if (fromMap->reusedFor >= 0) continue; // only reuse once
-            if (fromMap->allocator->check && !fromMap->allocator->check(toMap->data, toP, fromMap)) continue;
+            if (fromMap->allocator && fromMap->allocator->check && !fromMap->allocator->check(toMap->data, toP, fromMap)) continue;
 
             // does new mapping fit into old?
             bool reuse = (toList->layout->reuse)(toList->layout, i, fromList->layout, sNo);
@@ -816,7 +818,6 @@ static
 void doTransition(Laik_Data* d, Laik_Transition* t, Laik_ActionSeq* as,
                   Laik_MappingList* fromList, Laik_MappingList* toList)
 {
-    Laik_Partitioning* toP = t->toPartitioning;
     if (d->stat) {
         d->stat->switches++;
         if (!t || (t->actionCount == 0))
@@ -831,7 +832,7 @@ void doTransition(Laik_Data* d, Laik_Transition* t, Laik_ActionSeq* as,
             freeMappingList(fromList, d->stat);
         return;
     }
-
+    Laik_Partitioning* toP = t->toPartitioning;
     // be careful when reusing mappings:
     // the backend wants to send/receive data in arbitrary order
     // (to avoid deadlocks), but it never should overwrite data
