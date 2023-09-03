@@ -334,7 +334,7 @@ int laik_aseq_addTContext(Laik_ActionSeq* as,
 // append action to stop execution (even if there are more in the sequence)
 void laik_aseq_addHalt(Laik_ActionSeq* as);
 
-void laik_aseq_addreturntoPrimary(Laik_ActionSeq* as, int round);
+void laik_aseq_addReturnToPrimary(Laik_ActionSeq* as, int round);
 
 // append action to do the transition specified by the transition context ID
 void laik_aseq_addTExec(Laik_ActionSeq* as, int tid);

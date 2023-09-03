@@ -297,12 +297,18 @@ void laik_shmem_secondary_prepare(Laik_Inst_Data* idata, Laik_ActionSeq *as)
 
     bool changed = false;
     bool ret = false;
+    unsigned int maxround = 0;
     a = as->action;
     for (unsigned int i = 0; i < as->actionCount; i++, a = nextAction(a))
     {
         ret = false;
         switch (a->type)
         {
+        case LAIK_AT_ReturnToPrimary:
+        {
+            ret = true;
+            break;
+        }
         case LAIK_AT_GroupReduce:
         {   
             Laik_BackendAction* ba = (Laik_BackendAction*) a;
@@ -336,6 +342,7 @@ void laik_shmem_secondary_prepare(Laik_Inst_Data* idata, Laik_ActionSeq *as)
         default:
             break;
         }
+        maxround = 3 * a->round + 3 > maxround ? 3 * a->round + 3 : maxround;
 
         changed |= ret;
         if(!ret)
@@ -345,6 +352,7 @@ void laik_shmem_secondary_prepare(Laik_Inst_Data* idata, Laik_ActionSeq *as)
         
     }
     shmem_cpybuf_alloc_requested(&sd->cpybuf);
+    laik_aseq_addReturnToPrimary(as, maxround);
     laik_aseq_activateNewActions(as);
     laik_log_ActionSeqIfChanged(changed, as, "After shmem prepare");
 }
@@ -361,8 +369,6 @@ void laik_shmem_secondary_exec(Laik_Inst_Data* idata, Laik_ActionSeq *as)
     for(; laik_aseq_hasNext(as); a = laik_aseq_next(as))
     {
         if(a->chain_idx > idata->index) a = laik_next_exec(idata, as);
-
-        if(!laik_aseq_hasNext(as)) return;
 
         if(a->chain_idx < idata->index) return;
 

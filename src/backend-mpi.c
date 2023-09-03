@@ -230,7 +230,7 @@ bool laik_mpi_asyncSendRecv(Laik_ActionSeq *as)
     assert(as->newActionCount == 0);
 
     unsigned int count = 0;
-    int maxround = 0;
+    unsigned int maxround = 0;
     Laik_Action *a = as->action;
     for (unsigned int i = 0; i < as->actionCount; i++, a = nextAction(a))
     {

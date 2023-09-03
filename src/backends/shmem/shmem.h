@@ -43,7 +43,7 @@ typedef enum DataSpec{
 
 struct commHeader{
     DataSpec spec;
-    int receiver;
+    volatile int receiver;
     int shmid;
     int count;
     Laik_Range range;
