@@ -336,15 +336,11 @@ Laik_Range* coveringRanges(int n, Laik_RangeList* list, int myid)
         unsigned int firstOff = o;
         assert(mapNo == list->trange[o].mapNo);
         Laik_Range* range = &(ranges[mapNo]);
-        laik_log(2, "%d", list->trange[o].task);
 
         // range covering all task ranges for a given map number
         *range = list->trange[o].range;
-        laik_log_Range(range);
-        laik_log_flush(0);
         while((o+1 < list->off[myid+1]) && (list->trange[o+1].mapNo == mapNo)) {
             o++;
-            laik_log(2, "%d", list->trange[o].task);
             laik_range_expand(range, &(list->trange[o].range));
         }
 
@@ -580,6 +576,17 @@ void laik_data_copy(Laik_Range* range,
     // different layouts in mappings or no specific copy implementation:
     // use generic variant
     laik_layout_copy_gen(range, from, to);
+}
+
+void laik_data_reduce(Laik_Mapping* to, const Laik_Mapping* from1, const Laik_Mapping* from2, Laik_Data* data, Laik_Range* range, Laik_ReductionOperation redOp)
+{
+    if(to->layout->reduce && ! strcmp(from1->layout->name, from2->layout->name))
+    {
+        to->layout->reduce(to, from1, from2, data, range, redOp);
+        return;
+    }
+
+    laik_layout_reduce_gen(to, from1, from2, data, range, redOp);
 }
 
 

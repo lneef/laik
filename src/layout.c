@@ -21,6 +21,7 @@
 #include "laik/debug.h"
 
 #include <assert.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -68,7 +69,7 @@ void laik_layout_copy_gen(Laik_Range* range,
         laik_log_Range(range);
         laik_log_append(" (count %llu, elemsize %d) from mapping %p",
             laik_range_size(range), elemsize, from->start);
-        laik_log_append(" (data '%s'/, %s) ",
+        laik_log_append(" (data '%s'/ %d, %s) ",
             from->data->name, from->mapNo,
             from->layout->describe(from->layout));
         laik_log_flush("to mapping %p (data '%s'/%d, layout %s): ",
@@ -92,6 +93,38 @@ void laik_layout_copy_gen(Laik_Range* range,
         }
 #endif
         memcpy(toPtr, fromPtr, elemsize);
+        count++;
+    } while(next_lex(range, &idx));
+    assert(count == laik_range_size(range));
+}
+
+void laik_layout_reduce_gen(Laik_Mapping* to, const Laik_Mapping* from1, const Laik_Mapping* from2, Laik_Data* data, Laik_Range* range, Laik_ReductionOperation redOp)
+{
+    Laik_Layout* from1Layout = from1->layout;
+    Laik_Layout* from2Layout = from2->layout;
+    Laik_Layout* toLayout = to->layout;
+    unsigned int elemsize = to->data->elemsize;
+    //assert(elemsize == to->data->elemsize);
+
+    if(laik_log_begin(1))
+    {
+        laik_log(1, "Generic reduction of");
+        laik_log_Range(range);
+        laik_log_flush(0);
+    }
+    Laik_Index idx = range->from;
+    Laik_Type* dt = data->type;
+    assert(dt);
+    uint64_t count = 0;
+    do {
+        int64_t from1Offset = from1Layout->offset(from1Layout, from1->layoutSection, &idx);
+        int64_t from2Offset = from2Layout->offset(from2Layout, from2->layoutSection, &idx);
+        int64_t toOffset = toLayout->offset(toLayout, to->layoutSection, &idx);
+        void* from1Ptr = from1->start + from1Offset * elemsize;
+        void* from2Ptr = from2->start + from2Offset * elemsize;
+        void* toPtr = to->start + toOffset * elemsize;
+
+        dt->reduce(toPtr, from1Ptr, from2Ptr, 1, redOp);
         count++;
     } while(next_lex(range, &idx));
     assert(count == laik_range_size(range));
@@ -260,12 +293,14 @@ void laik_init_layout(Laik_Layout* l, int dims, int map_count, uint64_t count,
         copy = 0;
         pack = 0;
         unpack = 0;
+        reduce = 0;
     }
 
     // pack/unpack/copy are optional. If not given, use generic versions
     if (!pack)   pack   = laik_layout_pack_gen;
     if (!unpack) unpack = laik_layout_unpack_gen;
     if (!copy)   copy   = laik_layout_copy_gen;
+    if (!reduce) reduce = laik_layout_reduce_gen;
 
     // describe is optional
     if (!describe) describe = laik_layout_describe_gen;

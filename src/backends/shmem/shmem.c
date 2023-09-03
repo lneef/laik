@@ -482,16 +482,10 @@ int shmem_zeroCopySyncSend(Laik_Inst_Data* idata, Laik_Group* g, Laik_Transition
     return SHMEM_SUCCESS;
 }
 
-
-
-
-
-
 int shmem_recvReduce(Laik_Mapping* map, Laik_Range* range, Laik_Data* data, int sender, Laik_Inst_Data* idata, Laik_Group* g, Laik_ReductionOperation redOp)
 {
     Laik_Shmem_Comm* sg = shmem_comm(idata, g);
     int shmid = sg->headershmids[sender];
-    laik_log(2, "%d, %d", sender, shmid);
     struct commHeader* shmp = shmem_manager_attach(shmid, 0);
     while(shmp->receiver != sg->myid)
     {
@@ -499,9 +493,8 @@ int shmem_recvReduce(Laik_Mapping* map, Laik_Range* range, Laik_Data* data, int 
 
     char* ptr = shmem_manager_attach(shmp->shmid, 0);
     Laik_Mapping tmp;
-
     shmem_tmpMap(&tmp, range, ptr, map, shmp);
-    map->layout->reduce(map, map, &tmp, data, range, redOp); 
+    laik_data_reduce(map, map, &tmp, data, range, redOp);
 
     shmp->receiver = -1;
 

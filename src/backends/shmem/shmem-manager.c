@@ -23,10 +23,6 @@
 
 #include "backends/shmem/shmem.h"
 #include "laik.h"
-#include "laik/core.h"
-#include "laik/data.h"
-#include "laik/debug.h"
-#include "laik/space.h"
 #include "shmem-allocator.h"
 #include "shmem-manager.h"
 #include <sys/shm.h>
@@ -136,7 +132,7 @@ void* def_shmem_malloc(Laik_Data* d, Laik_Layout* ll, Laik_Range* range, Laik_Pa
     laik_log(1, "Range to be allocated:");
     laik_log_Range(&alloc_range);
     laik_log_flush(0);
-    
+
     if(laik_range_isEqual(range, &alloc_range))
     {
         size += laik_range_size(range) * d->elemsize;
@@ -158,20 +154,14 @@ bool allow_reuse(Laik_Data* data, Laik_Partitioning* toP, Laik_Mapping* m)
 
     Laik_RangeList* rl = laik_partitioning_allranges(toP);
 
-    laik_log_Range(&m->allocatedRange);
-    laik_log_flush(0);
-
     bool allow = true;
     for(unsigned i = 0 ; i < rl->count; ++i)
     {
         if(sg->libLocations[rl->trange[i].task] == 0) continue;
-        laik_log_Range(&rl->trange[i].range);
-        laik_log_flush(0);
         allow &= laik_range_within_range(&rl->trange[i].range, &m->allocatedRange);
 
     }
 
-    laik_log(2, "can:%d", allow);
 
     return allow;
 }

@@ -200,6 +200,10 @@ char *laik_get_map_addr(Laik_Data* d, int n, Laik_Index* idx);
 // copy data in a range between mappings
 void laik_data_copy(Laik_Range* range, Laik_Mapping* from, Laik_Mapping* to);
 
+// reduce data of mappings
+void laik_data_reduce(Laik_Mapping* to, const Laik_Mapping* from1, const Laik_Mapping* from2, Laik_Data* data, Laik_Range* range, Laik_ReductionOperation redOp);
+
+
 
 // provide memory resources for mapping of own partition for container <d>.
 // It will get used when in next setting or switching to a partitioning.
@@ -395,6 +399,9 @@ void laik_init_layout(Laik_Layout* l, int dims, int map_count, uint64_t count,
 void laik_layout_copy_gen(Laik_Range* range,
                           Laik_Mapping* from, Laik_Mapping* to);
 
+// generic reduction function
+void laik_layout_reduce_gen(Laik_Mapping* to, const Laik_Mapping* from1, 
+                            const Laik_Mapping* from2, Laik_Data* data, Laik_Range* range, Laik_ReductionOperation redOp);
 
 // lexicographical layout covering one 1d, 2d, 3d range
 
