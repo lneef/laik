@@ -28,44 +28,11 @@
 #include <sys/shm.h>
 #include <stdatomic.h>
 
-struct shmemPair
+int huge_pages = 0;
+
+void shmem_init_manager(int flag)
 {
-    int shmid;
-    void* ptr;
-    struct shmemPair* next;
-};
-
-struct shmemPair head;
-
-void* shmem_manager_alloc(size_t size)
-{
-    int shmid;
-    void* ptr = shmem_alloc(size, &shmid);
-
-    struct shmemPair* new = malloc( sizeof(struct shmemPair));
-
-    new -> shmid = shmid;
-    new -> ptr = ptr;
-
-    new ->next = head.next;
-    head.next = new;
-
-    return new -> ptr;
-
-}
-
-void shmem_manager_cleanup()
-{
-    for(struct shmemPair* c = head.next; c != NULL; )
-    {
-        shmem_free(c->ptr);
-        struct shmemPair* tmp = c;
-        c = c -> next;
-        free(tmp);
-    }
-
-    head.next = NULL;
-
+    huge_pages = flag;
 }
 
 void def_shmem_free(Laik_Data* d, Laik_Mapping* map){
@@ -98,7 +65,7 @@ void* def_shmem_malloc(Laik_Data* d, Laik_Layout* ll, Laik_Range* range, Laik_Pa
     if(sd->copyScheme != 0)
     {
         size += laik_range_size(range) * d->elemsize;
-        return shmem_alloc(size, &shmid);
+        return shmem_alloc_f(size, &shmid, huge_pages);
     }
     Laik_RangeList* rl = laik_partitioning_allranges(par);
     assert(rl);
@@ -136,7 +103,7 @@ void* def_shmem_malloc(Laik_Data* d, Laik_Layout* ll, Laik_Range* range, Laik_Pa
     if(laik_range_isEqual(range, &alloc_range))
     {
         size += laik_range_size(range) * d->elemsize;
-        return shmem_alloc(size, &shmid);
+        return shmem_alloc_f(size, &shmid, huge_pages);
     }
     size += laik_range_size(&alloc_range) * d ->elemsize;
     *range = alloc_range;

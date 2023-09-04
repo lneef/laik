@@ -750,6 +750,14 @@ int shmem_secondary_init(Laik_Shmem_Comm* sg, Laik_Inst_Data* idata, Laik_Group*
         copyToken = strtok_r(NULL, ",", &saveptrC);
     }
 
+    const char* huge_pages = getenv("LAIK_SHMEM_HUGE_PAGES");
+
+    if(huge_pages)
+    {
+        shmem_init_manager(SHM_HUGETLB);
+        shmem_init_cpybuf(SHM_HUGETLB);
+    }
+
 
     if(copyToken == 0 || !strcmp(copyToken, "2"))
     {

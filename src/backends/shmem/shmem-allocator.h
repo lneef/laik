@@ -38,6 +38,8 @@ void deleteAllocatedSegments();
 
 void* shmem_alloc(size_t size, int* shimdPtr);
 
+void* shmem_alloc_f(size_t size, int* shimdPtr, int flag);
+
 void* shmem_key_alloc(int key, size_t size, int* shimdPtr);
 
 void shmem_free_zero_copy(struct shmHeader* sh);

@@ -177,9 +177,14 @@ void* shmem_key_alloc(int key, size_t size, int* shimdPtr)
 
 void* shmem_alloc(size_t size, int* shimdPtr)
 {
+    return shmem_alloc_f(size, shimdPtr, 0);
+}
+
+void* shmem_alloc_f(size_t size, int* shimdPtr, int flag)
+{
     size_t header_size = PAD(HEADER_SIZE, HEADER_PAD);
     size_t alloc_size = size + header_size;
-    int shmid = shmget(IPC_PRIVATE, alloc_size, 0644 | IPC_CREAT | IPC_EXCL);
+    int shmid = shmget(IPC_PRIVATE, alloc_size, flag | 0644 | IPC_CREAT | IPC_EXCL);
     if (shmid == -1)
     {   
         laik_panic(strerror(errno));

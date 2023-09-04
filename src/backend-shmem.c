@@ -286,7 +286,6 @@ void laik_shmem_secondary_cleanup(Laik_Inst_Data* idata, Laik_ActionSeq* as)
     laik_log(1, "Shared Memory Backend Cleanup");
     Laik_Shmem_Data* sd = idata->backend_data;
     shmem_cpybuf_delete(&sd->cpybuf);
-    shmem_manager_cleanup();
 
     // call next layer for cleanup
     laik_next_cleanup(idata, as);

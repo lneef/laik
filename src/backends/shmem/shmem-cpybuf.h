@@ -33,4 +33,6 @@ void shmem_cpybuf_delete(struct cpyBuf*);
 void shmem_cpybuf_request(struct cpyBuf*, size_t size);
 
 void shmem_cpybuf_alloc_requested(struct cpyBuf*);
+
+void shmem_init_cpybuf(int flag);
 #endif

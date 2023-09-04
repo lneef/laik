@@ -21,6 +21,13 @@
 
 #include <stdlib.h>
 
+int cb_huge_pages = 0;
+
+void shmem_init_cpybuf(int flag)
+{
+    cb_huge_pages = flag;
+}
+
 struct cpyBuf* shmem_cpybuf_obtain()
 {
     struct cpyBuf* buffer = malloc(sizeof(struct cpyBuf));
@@ -42,7 +49,7 @@ void shmem_cpybuf_alloc(struct cpyBuf* buf, size_t size){
     {
         if(buf->ptr != NULL) shmem_free( buf->ptr);
         int shmid;
-        buf -> ptr = shmem_alloc(size, &shmid);
+        buf -> ptr = shmem_alloc_f(size, &shmid, cb_huge_pages);
         buf -> size = size;
         assert(shmid > 0);
         buf -> shmid = shmid;

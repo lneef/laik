@@ -22,10 +22,6 @@
 #include <stddef.h>
 #include <laik.h>
 
-void* shmem_manager_alloc(size_t size);
-
-void shmem_manager_cleanup();
-
 Laik_Allocator* shmem_allocator();
 
 void* shmem_manager_attach(int shmid, int flag);
@@ -41,5 +37,7 @@ bool shmem_manager_zeroCopy(char* ptr);
 void* def_shmem_malloc(Laik_Data* d, Laik_Layout* ll, Laik_Range* range, Laik_Partitioning* p);
 
 void def_shmem_free(Laik_Data* d, Laik_Mapping* m);
+
+void shmem_init_manager(int flag);
 
 #endif
