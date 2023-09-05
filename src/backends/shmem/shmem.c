@@ -86,16 +86,33 @@ static int createMetaInfoSeg(Laik_Shmem_Data* sd)
 
 static void shmem_init_sync(int rank, int size, Laik_Inst_Data* idata, Laik_Group* g)
 {
+    int barrier = 1;
     if(rank == 0)
     {
         for(int i = 1; i < size; ++i)
         {   
-            int barrier;
-            RECV_INTS(&barrier, 1, i, idata, g);
+            int received;
+            RECV_INTS(&received, 1, i, idata, g);
+            barrier += received;
         }
+
+        assert(barrier == size);
     }else {
         
-        SEND_INTS(&g->myid, 1, 0, idata, g);
+        SEND_INTS(&barrier, 1, 0, idata, g);
+    }
+
+    if(rank == 0)
+    {
+        for(int i = 1; i < size; ++i)
+        {   
+            SEND_INTS(&barrier, 1, i, idata, g);
+        }
+    }else {
+    
+        RECV_INTS(&barrier, 1, 0, idata, g);
+
+        assert(barrier == size);
     }
 }
 
@@ -185,8 +202,6 @@ static int shmem_split_location(int rank, int size, Laik_Inst_Data* idata, int s
         if (shmp == (void *)-1)
             return SHMEM_SHMAT_FAILED;
 
-        // register for barrier
-        shmem_init_sync(rank, size, idata, g);
 
         shmem_init_sync(rank, size, idata, g);
 
@@ -210,9 +225,6 @@ static int shmem_split_location(int rank, int size, Laik_Inst_Data* idata, int s
             atomic_init(&shmp->colour, g->myid);
             sg->location = g->myid;
         }
-        
-        // register for barrier
-        shmem_init_sync(rank, size, idata, g);
 
         shmem_init_sync(rank, size, idata, g);
     }
@@ -222,7 +234,6 @@ static int shmem_split_location(int rank, int size, Laik_Inst_Data* idata, int s
         bool found = false;
         atomic_store(&shmp->procs[rank], sd->set);
 
-        shmem_init_sync(rank, size, idata, g);
         shmem_init_sync(rank, size, idata, g);
 
         for(int i = 0; i < size; ++i)
