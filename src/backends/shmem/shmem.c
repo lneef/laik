@@ -88,7 +88,7 @@ static void shmem_init_sync(int rank, int size, Laik_Inst_Data* idata, Laik_Grou
 {
     if(rank == 0)
     {
-        for(int i = 1; i<size; ++i)
+        for(int i = 1; i < size; ++i)
         {   
             int barrier;
             RECV_INTS(&barrier, 1, i, idata, g);
@@ -140,8 +140,6 @@ static void shmem_parse_affinity_mask(Laik_Shmem_Data* sd)
         
         ++i;
     }
-
-
     laik_panic("No fitting mask");
 }
 
@@ -190,13 +188,15 @@ static int shmem_split_location(int rank, int size, Laik_Inst_Data* idata, int s
         // register for barrier
         shmem_init_sync(rank, size, idata, g);
 
+        shmem_init_sync(rank, size, idata, g);
+
         if(!sd->affinity) sg -> location = atomic_load(&shmp->colour);
 
     }
     else
     {
         created = true;
-        // Master initialization
+        // creator initialization
         
         shmp = shmat(shmid, NULL, 0);
         if (shmp == (void *)-1)
@@ -212,6 +212,8 @@ static int shmem_split_location(int rank, int size, Laik_Inst_Data* idata, int s
         }
         
         // register for barrier
+        shmem_init_sync(rank, size, idata, g);
+
         shmem_init_sync(rank, size, idata, g);
     }
 
@@ -752,7 +754,7 @@ int shmem_secondary_init(Laik_Shmem_Comm* sg, Laik_Inst_Data* idata, Laik_Group*
 
     const char* huge_pages = getenv("LAIK_SHMEM_HUGE_PAGES");
 
-    if(huge_pages)
+    if(huge_pages != 0)
     {
         shmem_init_manager(SHM_HUGETLB);
         shmem_init_cpybuf(SHM_HUGETLB);

@@ -289,7 +289,6 @@ void laik_init_layout(Laik_Layout* l, int dims, int map_count, uint64_t count,
 
     // for testing, LAIK_LAYOUT_GENERIC enforces use of generic variants
     if (getenv("LAIK_LAYOUT_GENERIC")) {
-        laik_log(2, "%s", "gen");
         copy = 0;
         pack = 0;
         unpack = 0;
