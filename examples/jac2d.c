@@ -140,8 +140,8 @@ int main(int argc, char* argv[])
     // - prWrite: cells to update (disjunctive partitioning)
     // - prRead : extends partitionings by haloes, to read neighbor values
     Laik_Partitioner *prWrite, *prRead;
-    //prWrite = laik_new_bisection_partitioner();
-    prWrite = laik_new_block_2d_partitioner();
+    prWrite = laik_new_bisection_partitioner();
+    //prWrite = laik_new_block_2d_partitioner();
     prRead = use_cornerhalo ? laik_new_cornerhalo_partitioner(1) :
                               laik_new_halo_partitioner(1);
 
@@ -173,6 +173,10 @@ int main(int argc, char* argv[])
     //   base[y][x] is at (base + y * ystride + x)
     laik_get_map_2d(dWrite, 0, (void**) &baseW, &ysizeW, &ystrideW, &xsizeW);
     // arbitrary non-zero values based on global indexes to detect bugs
+
+#ifdef _OPENMP
+#pragma omp parallel for collapse(2) schedule(static)
+#endif
     for(uint64_t y = 0; y < ysizeW; y++)
         for(uint64_t x = 0; x < xsizeW; x++)
             baseW[y * ystrideW + x] = (double) ((gx1 + x + gy1 + y) & 6);
@@ -224,6 +228,10 @@ int main(int argc, char* argv[])
 
             double newValue, diff, res;
             res = 0.0;
+
+#ifdef _OPENMP
+#pragma omp parallel for reduction(+: res) private(newValue, diff) collapse(2) schedule(static)
+#endif
             for(int64_t y = y1; y < y2; y++) {
                 for(int64_t x = x1; x < x2; x++) {
                     newValue = 0.25 * ( baseR[ (y-1) * ystrideR + x    ] +
@@ -269,6 +277,10 @@ int main(int argc, char* argv[])
         }
         else {
             double newValue;
+
+#ifdef _OPENMP
+#pragma omp parallel for private(newValue) collapse(2) schedule(static)
+#endif
             for(int64_t y = y1; y < y2; y++) {
                 for(int64_t x = x1; x < x2; x++) {
                     newValue = 0.25 * ( baseR[ (y-1) * ystrideR + x    ] +

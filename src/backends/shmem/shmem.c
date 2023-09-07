@@ -672,11 +672,11 @@ int shmem_update_comm(Laik_Shmem_Comm* sg, Laik_Group* g, Laik_Inst_Data* idata,
 
             for(int i = 1 ;i < sg->size; ++i)
             {
-                SEND_INTS(&shmid, 1, i, idata, g);
+                SEND_INTS(&shmid, 1, sg->primaryRanks[i], idata, g);
             }
         }else {
             int shmid;
-            RECV_INTS(&shmid, 1, 0, idata, g);
+            RECV_INTS(&shmid, 1, sg->primaryRanks[0], idata, g);
 
             sg->barrier = shmem_manager_attach(shmid, 0);
         }
