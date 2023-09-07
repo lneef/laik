@@ -53,7 +53,6 @@ struct commHeader{
     int shmid;
     int count;
     Laik_Range range;
-    pthread_barrier_t sync;
 };
 
 #pragma pack(push, 1)
@@ -84,6 +83,8 @@ typedef struct _Laik_Shmem_Comm
     unsigned char* libLocations;
 
     int zcloc;
+
+    pthread_barrier_t* barrier;
 
 }Laik_Shmem_Comm;
 
@@ -144,10 +145,7 @@ int shmem_sendPack(Laik_Mapping* map, Laik_Range* range, int receiver, Laik_Inst
 
 int shmem_recvReduce(Laik_Mapping* map, Laik_Range* range, Laik_Data* data, int sender, Laik_Inst_Data* idata, Laik_Group* g, Laik_ReductionOperation redOp);
 
-int shmem_zeroCopySyncSend(Laik_Inst_Data* idata, Laik_Group* g, Laik_TransitionContext* t);
-
-int shmem_zeroCopySyncRecv(Laik_Inst_Data* idata, Laik_Group* g, Laik_TransitionContext* t);
-
+int shmem_zeroCopySync(Laik_Inst_Data* idata, Laik_Group* g, Laik_TransitionContext* t);
 //------------------------------------------------------------------------------
 // copy buffer management and subgroup handling
 

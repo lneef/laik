@@ -35,8 +35,7 @@
 #define LAIK_AT_ShmemReceiveMap (LAIK_AT_Backend + 46)
 #define LAIK_AT_ShmemMapGroupReduce (LAIK_AT_Backend + 47)
 #define LAIK_AT_ShmemMapBroadcast (LAIK_AT_Backend + 48)
-#define LAIK_AT_ShmemZeroCopySyncSend (LAIK_AT_Backend + 49)
-#define LAIK_AT_ShmemZeroCopySyncRecv (LAIK_AT_Backend + 50)
+#define LAIK_AT_ShmemZeroCopySync (LAIK_AT_Backend + 49)
 
 
 typedef 

@@ -16,7 +16,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "laik/core.h"
+
 #define _GNU_SOURCE
 #include <sched.h>
 #include <pthread.h>
@@ -434,10 +434,9 @@ int shmem_recvMap(Laik_Mapping* map, Laik_Range* range, int sender, Laik_Inst_Da
     return SHMEM_SUCCESS;
 }
 
-int shmem_zeroCopySyncRecv(Laik_Inst_Data* idata, Laik_Group* g, Laik_TransitionContext* tc)
+int shmem_zeroCopySync(Laik_Inst_Data* idata, Laik_Group* g, Laik_TransitionContext* tc)
 {
     Laik_Shmem_Comm* sg = shmem_comm(idata, g);
-    struct commHeader* shmp = shmem_manager_attach(sg->headershmids[0], 0);
     Laik_Transition* t = tc->transition;
     Laik_Data* d = tc->data;
 
@@ -445,62 +444,10 @@ int shmem_zeroCopySyncRecv(Laik_Inst_Data* idata, Laik_Group* g, Laik_Transition
         copyMaps(t, tc->toList, tc->fromList, d->stat);
     t->localCount = 0;
 
-    /*
-    while(shmp->receiver >= -1)
-    {
-
-    }
-    atomic_fetch_add(&shmp->receiver, 1);
-    while(atomic_load(&shmp->receiver) != -1)
-    {
-
-    }
-    
-    atomic_fetch_add(&shmp->barrier, 1);
-    */
-
-    pthread_barrier_wait(&shmp->sync);
-    laik_log(2, "Done");
-
-    shmem_manager_detach(shmp);
-
-
+    pthread_barrier_wait(sg->barrier);
     return SHMEM_SUCCESS;
 }
 
-int shmem_zeroCopySyncSend(Laik_Inst_Data* idata, Laik_Group* g, Laik_TransitionContext* tc)
-{
-    Laik_Shmem_Data* sd = idata->backend_data;
-    Laik_Shmem_Comm* sg = shmem_comm(idata, g);
-    struct commHeader* shmp = sd->shmp;
-    Laik_Transition* t = tc->transition;
-    Laik_Data* d = tc->data;
-    
-    if (t->localCount > 0)
-        copyMaps(t, tc->toList, tc->fromList, d->stat);
-    t -> localCount = 0;
-    
-    /*
-    int expected = -sg->size;
-
-    atomic_init(&shmp->barrier, expected);
-    atomic_init(&shmp->receiver, expected);
-    
-    while(atomic_load(&shmp->receiver) != -1)
-    {
-    }
-
-    while(atomic_load(&shmp->barrier) != -1)
-    {
-        
-    }*/
-
-    pthread_barrier_wait(&shmp->sync);
-
-    laik_log(2, "Done");
-    laik_log_flush(0);    
-    return SHMEM_SUCCESS;
-}
 
 int shmem_recvReduce(Laik_Mapping* map, Laik_Range* range, Laik_Data* data, int sender, Laik_Inst_Data* idata, Laik_Group* g, Laik_ReductionOperation redOp)
 {
@@ -670,11 +617,6 @@ int shmem_update_comm(Laik_Shmem_Comm* sg, Laik_Group* g, Laik_Inst_Data* idata,
         RECV_INTS(&sg->numIslands, 1, 0, idata, g);
     }
 
-    if(sg->myid == 0){
-        pthread_barrierattr_t barrier_attr;
-        pthread_barrierattr_setpshared(&barrier_attr, PTHREAD_PROCESS_SHARED);
-        pthread_barrier_init(&sd->shmp->sync, &barrier_attr, sg->size);
-    } 
 
     sg->primaryRanks = malloc(sg->size * sizeof(int));
 
@@ -716,6 +658,30 @@ int shmem_update_comm(Laik_Shmem_Comm* sg, Laik_Group* g, Laik_Inst_Data* idata,
     sg->libLocations[g->myid] = 1;
 
     sg->primaryRanks[sg->myid] = rank; 
+
+    if(sd->copyScheme == 0)
+    {
+        if(sg->myid == 0)
+        {
+            int shmid;
+            sg->barrier = shmem_alloc(sizeof(pthread_barrier_t), &shmid);
+            pthread_barrierattr_t barrier_attr;
+            pthread_barrierattr_init(&barrier_attr);
+            pthread_barrierattr_setpshared(&barrier_attr, PTHREAD_PROCESS_SHARED);
+            pthread_barrier_init(sg->barrier, &barrier_attr, sg->size);
+
+            for(int i = 1 ;i < sg->size; ++i)
+            {
+                SEND_INTS(&shmid, 1, i, idata, g);
+            }
+        }else {
+            int shmid;
+            RECV_INTS(&shmid, 1, 0, idata, g);
+
+            sg->barrier = shmem_manager_attach(shmid, 0);
+        }
+        
+    }
 
     return SHMEM_SUCCESS;
     

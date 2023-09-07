@@ -397,15 +397,13 @@ void laik_shmem_secondary_prepare(Laik_Inst_Data* idata, Laik_ActionSeq *as)
     }
 
     if(zc)
-    {   if(sg->myid != 0)
-            laik_shmem_addZeroCopySync(as, LAIK_AT_ShmemZeroCopySyncRecv, 3 * rd + 3, 0, idata->index);
-        else
-            laik_shmem_addZeroCopySync(as, LAIK_AT_ShmemZeroCopySyncSend, 3 * rd + 3, 0, idata->index);
+    {   
+        laik_shmem_addZeroCopySync(as, LAIK_AT_ShmemZeroCopySync, 3 * rd + 3, 0, idata->index);
 
     }
 
     shmem_cpybuf_alloc_requested(&sd->cpybuf);
-    laik_aseq_addReturnToPrimary(as, maxround);
+    laik_aseq_addReturnToPrimary(as, maxround + 1);
     laik_aseq_activateNewActions(as);
     laik_log_ActionSeqIfChanged(changed, as, "After shmem prepare");
 }
@@ -487,16 +485,10 @@ void laik_shmem_secondary_exec(Laik_Inst_Data* idata, Laik_ActionSeq *as)
             laik_shmem_exec_ReceiveMap(a, tc, idata, g);
             break;
         }
-        case LAIK_AT_ShmemZeroCopySyncSend:
+        case LAIK_AT_ShmemZeroCopySync:
         {
             assert(a->chain_idx == index);
-            shmem_zeroCopySyncSend(idata, g, tc);
-            break;
-        }
-        case LAIK_AT_ShmemZeroCopySyncRecv:
-        {
-            assert(a->chain_idx == index);
-            shmem_zeroCopySyncRecv(idata, g, tc);
+            shmem_zeroCopySync(idata, g, tc);
             break;
         }
         default:
@@ -583,8 +575,7 @@ bool laik_shmem_log_action(Laik_Inst_Data* idata, Laik_ActionSeq* as, Laik_Actio
         laik_log_TaskGroupAS(as, aa->subgroup, a->chain_idx);
         break;
     }
-    case LAIK_AT_ShmemZeroCopySyncRecv:
-    case LAIK_AT_ShmemZeroCopySyncSend:
+    case LAIK_AT_ShmemZeroCopySync:
     {
         laik_log_append("ShmemZeroCopySync");
         break;
