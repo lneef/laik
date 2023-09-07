@@ -22,6 +22,7 @@
 #include "backends/shmem/shmem-cpybuf.h"
 #include "laik/action.h"
 #include "laik/core.h"
+#include <bits/pthreadtypes.h>
 #include<laik-internal.h>
 #include <stdatomic.h>
 #include<stddef.h>
@@ -52,7 +53,7 @@ struct commHeader{
     int shmid;
     int count;
     Laik_Range range;
-    atomic_int barrier;
+    pthread_barrier_t sync;
 };
 
 #pragma pack(push, 1)
@@ -83,9 +84,6 @@ typedef struct _Laik_Shmem_Comm
     unsigned char* libLocations;
 
     int zcloc;
-
-    struct commHeader** headers;
-
 
 }Laik_Shmem_Comm;
 

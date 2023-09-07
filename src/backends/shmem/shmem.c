@@ -16,9 +16,10 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "laik/core.h"
 #define _GNU_SOURCE
 #include <sched.h>
-
+#include <pthread.h>
 #include "shmem.h"
 #include "backends/shmem/shmem-cpybuf.h"
 #include "backends/shmem/shmem-manager.h"
@@ -74,7 +75,6 @@ static int createMetaInfoSeg(Laik_Shmem_Data* sd)
     sd->shmp = shmem_alloc(sizeof(struct commHeader), &sd->headerShmid);
     assert(sd->shmp != (void*)-1);
     sd->shmp->receiver = -1;
-    sd->shmp->barrier = -1;
     sd->cpybuf = (struct cpyBuf) {
         .size = 0,
         .request = 0,
@@ -445,7 +445,7 @@ int shmem_zeroCopySyncRecv(Laik_Inst_Data* idata, Laik_Group* g, Laik_Transition
         copyMaps(t, tc->toList, tc->fromList, d->stat);
     t->localCount = 0;
 
-
+    /*
     while(shmp->receiver >= -1)
     {
 
@@ -457,6 +457,10 @@ int shmem_zeroCopySyncRecv(Laik_Inst_Data* idata, Laik_Group* g, Laik_Transition
     }
     
     atomic_fetch_add(&shmp->barrier, 1);
+    */
+
+    pthread_barrier_wait(&shmp->sync);
+    laik_log(2, "Done");
 
     shmem_manager_detach(shmp);
 
@@ -476,6 +480,7 @@ int shmem_zeroCopySyncSend(Laik_Inst_Data* idata, Laik_Group* g, Laik_Transition
         copyMaps(t, tc->toList, tc->fromList, d->stat);
     t -> localCount = 0;
     
+    /*
     int expected = -sg->size;
 
     atomic_init(&shmp->barrier, expected);
@@ -488,10 +493,12 @@ int shmem_zeroCopySyncSend(Laik_Inst_Data* idata, Laik_Group* g, Laik_Transition
     while(atomic_load(&shmp->barrier) != -1)
     {
         
-    }
-    
-   
-        
+    }*/
+
+    pthread_barrier_wait(&shmp->sync);
+
+    laik_log(2, "Done");
+    laik_log_flush(0);    
     return SHMEM_SUCCESS;
 }
 
@@ -662,6 +669,13 @@ int shmem_update_comm(Laik_Shmem_Comm* sg, Laik_Group* g, Laik_Inst_Data* idata,
 
         RECV_INTS(&sg->numIslands, 1, 0, idata, g);
     }
+
+    if(sg->myid == 0){
+        pthread_barrierattr_t barrier_attr;
+        pthread_barrierattr_setpshared(&barrier_attr, PTHREAD_PROCESS_SHARED);
+        pthread_barrier_init(&sd->shmp->sync, &barrier_attr, sg->size);
+    } 
+
     sg->primaryRanks = malloc(sg->size * sizeof(int));
 
     int ii = 0;
@@ -673,7 +687,6 @@ int shmem_update_comm(Laik_Shmem_Comm* sg, Laik_Group* g, Laik_Inst_Data* idata,
     }
 
     sg->headershmids = malloc(sg->size * sizeof(int));
-    sg->headers = malloc(sg->size * sizeof(void*));
 
     sg->libLocations = calloc(g->size, sizeof(unsigned char));
 
@@ -698,12 +711,6 @@ int shmem_update_comm(Laik_Shmem_Comm* sg, Laik_Group* g, Laik_Inst_Data* idata,
 
             if(i == 0) sg->zcloc = g->myid;
         }
-    }
-
-    for(int i = 0; i< sg->size; ++i)
-    {
-        if(i == sg->myid) continue;
-        sg->headers[i] = shmem_manager_attach(sg->headershmids[i], 0);
     }
 
     sg->libLocations[g->myid] = 1;
