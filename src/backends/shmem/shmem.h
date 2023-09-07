@@ -21,6 +21,7 @@
 
 #include "backends/shmem/shmem-cpybuf.h"
 #include "laik/core.h"
+#include <stdatomic.h>
 #include<laik-internal.h>
 #include<stddef.h>
 #include<laik.h>
@@ -43,7 +44,7 @@ typedef enum DataSpec{
 
 struct commHeader{
     DataSpec spec;
-    volatile int receiver;
+    atomic_int receiver;
     int shmid;
     int count;
     Laik_Range range;

@@ -85,16 +85,33 @@ static int createMetaInfoSeg(Laik_Shmem_Data* sd)
 
 static void shmem_init_sync(int rank, int size, Laik_Inst_Data* idata, Laik_Group* g)
 {
+    int barrier = 1;
     if(rank == 0)
     {
-        for(int i = 1; i<size; ++i)
+        for(int i = 1; i < size; ++i)
         {   
-            int barrier;
-            RECV_INTS(&barrier, 1, i, idata, g);
+            int received;
+            RECV_INTS(&received, 1, i, idata, g);
+            barrier += received;
         }
+
+        assert(barrier == size);
     }else {
         
-        SEND_INTS(&g->myid, 1, 0, idata, g);
+        SEND_INTS(&barrier, 1, 0, idata, g);
+    }
+
+    if(rank == 0)
+    {
+        for(int i = 1; i < size; ++i)
+        {   
+            SEND_INTS(&barrier, 1, i, idata, g);
+        }
+    }else {
+    
+        RECV_INTS(&barrier, 1, 0, idata, g);
+
+        assert(barrier == size);
     }
 }
 
@@ -196,7 +213,7 @@ static int shmem_split_location(int rank, int size, Laik_Inst_Data* idata, int s
     else
     {
         created = true;
-        // Master initialization
+        // creator initialization
         
         shmp = shmat(shmid, NULL, 0);
         if (shmp == (void *)-1)
@@ -204,7 +221,6 @@ static int shmem_split_location(int rank, int size, Laik_Inst_Data* idata, int s
 
         if(sd->affinity)
         {
-            laik_log(2, "affinity");
             for(int i = 0; i < size; ++i)
                 atomic_init(&shmp->procs[i], -1);
         }else {
@@ -221,7 +237,6 @@ static int shmem_split_location(int rank, int size, Laik_Inst_Data* idata, int s
         bool found = false;
         atomic_init(&shmp->procs[rank], sd->set);
 
-        shmem_init_sync(rank, size, idata, g);
         shmem_init_sync(rank, size, idata, g);
 
         for(int i = 0; i < size; ++i)
@@ -685,11 +700,10 @@ int shmem_secondary_init(Laik_Shmem_Comm* sg, Laik_Inst_Data* idata, Laik_Group*
         char *affinity = getenv("LAIK_SHMEM_AFFINITY");
         affinityToken = affinity == NULL ? NULL : strtok_r(affinity, ",", &saveptrR);
     }else {
-        affinityToken = strtok_r(NULL, ",", &saveptrA);
+        affinityToken = strtok_r(NULL, ",", &saveptrR);
     }
 
     sd -> affinity = affinityToken ? atoi(affinityToken) == 1 : false;
-    laik_log(2, "aff%d", sd->affinity);
 
     if(!saveptrR)
     {

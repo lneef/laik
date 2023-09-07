@@ -352,7 +352,7 @@ void laik_shmem_secondary_prepare(Laik_Inst_Data* idata, Laik_ActionSeq *as)
         
     }
     shmem_cpybuf_alloc_requested(&sd->cpybuf);
-    laik_aseq_addReturnToPrimary(as, maxround);
+    laik_aseq_addReturnToPrimary(as, maxround + 1);
     laik_aseq_activateNewActions(as);
     laik_log_ActionSeqIfChanged(changed, as, "After shmem prepare");
 }

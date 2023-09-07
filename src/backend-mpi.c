@@ -453,7 +453,7 @@ void laik_mpi_finalize(Laik_Inst_Data* idata, Laik_Instance* inst)
     int64_t time = ((int64_t)end.tv_sec - (int64_t)start.tv_sec) * (int64_t)1000000000
          + ((int64_t)end.tv_nsec - (int64_t)start.tv_nsec);
 
-    printf("%lo,", time);
+    printf("%ld,", time);
 
 }
 
