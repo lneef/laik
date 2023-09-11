@@ -139,6 +139,7 @@ void* shmem_key_alloc(int key, size_t size, int* shimdPtr)
     size_t alloc_size = size + header_size;
     bool created = true;
 
+    // open shared memory segment
     int shmid = shmem_shmid(key, alloc_size, IPC_CREAT | IPC_EXCL | 0644);
     if (shmid == -1)
     {  

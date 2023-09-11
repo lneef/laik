@@ -602,6 +602,7 @@ size_t alloc_lex(Laik_Mapping* m, int n, Laik_Partitioning* p)
     Lex_Memory_Header* hd = (Lex_Memory_Header*) ptr;
     ll->e[n].hd = hd;
 
+    // initialize layout for allocated range
     init_lex(ll, &ll->e[n], m->layout->dims, &alloc_range);
 
     strncpy(hd->hd.name, LEX_IDENTIFIER, 9);

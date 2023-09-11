@@ -47,6 +47,8 @@ void def_shmem_free(Laik_Data* d, Laik_Mapping* map){
     }
     
 }
+
+// cantors pairing fucntion
 static int pair(int colour, int rank)
 {
     int tmp = (colour + rank) * (colour + rank + 1);
@@ -67,6 +69,8 @@ void* def_shmem_malloc(Laik_Data* d, Laik_Layout* ll, Laik_Range* range, Laik_Pa
         size += laik_range_size(range) * d->elemsize;
         return shmem_alloc_f(size, &shmid, huge_pages);
     }
+
+    //obtain ranges of other tasks
     Laik_RangeList* rl = laik_partitioning_allranges(par);
     assert(rl);
     //empty range
@@ -81,7 +85,7 @@ void* def_shmem_malloc(Laik_Data* d, Laik_Layout* ll, Laik_Range* range, Laik_Pa
     
     Laik_Shmem_Comm* sg = g->backend_data[idata->index];
 
-    // only works for one secondary backend directly below the primary
+    // expand ranges such that all ranges on the current island are covered
     for(unsigned i = 0; i < rl->count; ++i)
     {
         if(sg->libLocations[rl->trange[i].task] == 0) continue;
@@ -122,6 +126,8 @@ bool allow_reuse(Laik_Data* data, Laik_Partitioning* toP, Laik_Mapping* m)
     Laik_RangeList* rl = laik_partitioning_allranges(toP);
 
     bool allow = true;
+
+    // check if all new range can be incorporated
     for(unsigned i = 0 ; i < rl->count; ++i)
     {
         if(sg->libLocations[rl->trange[i].task] == 0) continue;

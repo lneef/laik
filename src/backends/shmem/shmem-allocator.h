@@ -32,20 +32,25 @@ struct shmHeader
 #define HEADER_SIZE (sizeof(struct shmHeader))
 #define HEADER_PAD 64
 
+// free specific segment
 void shmem_free(void* ptr);
 
+// release all allocated segments
 void deleteAllocatedSegments();
 
+// allocate shared memory segment of specific size
 void* shmem_alloc(size_t size, int* shimdPtr);
 
+// same as shmem_alloc, but the user can specify additional flags
 void* shmem_alloc_f(size_t size, int* shimdPtr, int flag);
 
+// open shared memory segment with a specific key
 void* shmem_key_alloc(int key, size_t size, int* shimdPtr);
 
+// free memory segment opened in the context of the zero copy scheme
 void shmem_free_zero_copy(struct shmHeader* sh);
 
-void cleanup(void);
-
+// get shmid and offset for specific pointer
 int get_shmid(void *ptr, int *shmid, int *offset);
 
 #endif

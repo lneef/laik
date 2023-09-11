@@ -80,10 +80,16 @@ typedef struct _Laik_Shmem_Comm
     // shmids of headers of ranks in the location
     int* headershmids;
 
+    //-------------------------------------------
+    //zero copy specific 
+
+    // saves all library ranks on the same island
     unsigned char* libLocations;
 
+    // my location (used in key for shared memory segment)
     int zcloc;
 
+    // barrier for this group
     pthread_barrier_t* barrier;
 
 }Laik_Shmem_Comm;
@@ -108,8 +114,10 @@ typedef struct _Laik_Shmem_Data
     //chosen copy scheme
     int (*send)(void*, int, int, int, struct _Laik_Shmem_Data*);
 
+    // my communication header
     struct commHeader* shmp;
 
+    //copy buffer for two copy actions
     struct cpyBuf cpybuf;
 
     

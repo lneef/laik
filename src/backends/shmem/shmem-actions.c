@@ -136,6 +136,7 @@ void laik_shmem_exec_GroupBroadCast(Laik_Action* a, Laik_ActionSeq* as, Laik_Tra
     {
         int count = laik_aseq_groupCount(as, ba->subgroup, chain_idx);
 
+        // collect input values
         for(int i = 1; i < count; ++i)
         {
             int task = laik_aseq_taskInGroup(as, ba->subgroup, i, chain_idx);
@@ -156,8 +157,11 @@ void laik_shmem_exec_GroupReduce(Laik_Action * a, Laik_ActionSeq* as, Laik_Trans
     Laik_Shmem_Comm* sg = g->backend_data[idata->index];
 
     if(sg->myid == ba->primary)
-    {    
+    {   
+        // memcpy frombBuf into temporary buffer 
         memcpy(ba->buf, ba->fromBuf, ba->count * data->elemsize);
+
+        // collect input values
         int count = laik_aseq_groupCount(as, ba->subgroup, chain_idx);
         for(int i = 1; i < count; ++i)
         {   
@@ -220,6 +224,8 @@ void laik_shmem_exec_MapGroupReduce(Laik_ActionSeq* as, Laik_Action* a, Laik_Tra
     {   
         
         int count = laik_aseq_groupCount(as, aa->subgroup, chain_idx);
+
+        //collect input values of all other tasks
         for(int i = 0; i < count; ++i)
         {   
             int task = laik_aseq_taskInGroup(as, aa->subgroup, i, chain_idx);
@@ -228,6 +234,8 @@ void laik_shmem_exec_MapGroupReduce(Laik_ActionSeq* as, Laik_Action* a, Laik_Tra
         }
     }
     else{
+
+        // select copy scheme and send value
         if(aa->cs == SHMEM_OneCopy)
         {
             shmem_sendMap(map, aa->range, aa->primary, idata);
@@ -254,6 +262,7 @@ void laik_shmem_exec_MapBroadCast(Laik_ActionSeq* as , Laik_Action* a, Laik_Tran
 
         int (*send)(Laik_Mapping*, Laik_Range*, int, Laik_Inst_Data*);
 
+        // choose copy scheme
         if(aa->cs == SHMEM_OneCopy)
         {
             send = shmem_sendMap;
@@ -261,6 +270,7 @@ void laik_shmem_exec_MapBroadCast(Laik_ActionSeq* as , Laik_Action* a, Laik_Tran
             send = shmem_sendPack;
         }
 
+        // distribute result
         for(int i = 1; i < count; ++i)
         {
             int task = laik_aseq_taskInGroup(as, aa->subgroup, i, chain_idx);

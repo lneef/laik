@@ -24,15 +24,21 @@ struct cpyBuf{
     size_t size;
 };
 
+// obtain a copy buffer
 struct cpyBuf* shmem_cpybuf_obtain();
 
+// allocate a copy buffer with specific size
 void shmem_cpybuf_alloc(struct cpyBuf*, size_t size);
 
+// delete copy buffer, i.e. free resources
 void shmem_cpybuf_delete(struct cpyBuf*);
 
+// request certain size (no allocation)
 void shmem_cpybuf_request(struct cpyBuf*, size_t size);
 
+// allocate requested size
 void shmem_cpybuf_alloc_requested(struct cpyBuf*);
 
+// initialization (currently only huge pages)
 void shmem_init_cpybuf(int flag);
 #endif

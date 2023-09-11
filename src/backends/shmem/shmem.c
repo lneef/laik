@@ -129,6 +129,8 @@ static void shmem_parse_affinity_mask(Laik_Shmem_Data* sd)
 
     int i = 0;
     int set = 0;
+
+    //parse bytewise
     while(override[i])
     {
         CPU_ZERO_S(size, mask);
@@ -229,9 +231,11 @@ static int shmem_split_location(int rank, int size, Laik_Inst_Data* idata, int s
         shmem_init_sync(rank, size, idata, g);
     }
 
+    // affinity masks require additional steps
     if(sd->affinity)
     {
         bool found = false;
+        // store my index of my set
         atomic_store(&shmp->procs[rank], sd->set);
 
         shmem_init_sync(rank, size, idata, g);
@@ -364,6 +368,8 @@ int shmem_sendMap(Laik_Mapping* map, Laik_Range* range, int receiver, Laik_Inst_
 int shmem_sendPack(Laik_Mapping* map, Laik_Range* range, int receiver,  Laik_Inst_Data* idata){   
     Laik_Shmem_Data* sd = idata->backend_data;
     size_t count = laik_range_size(range);
+
+    // obtain large enough copy buffer
     shmem_cpybuf_alloc(&sd->cpybuf, count * map->data->elemsize + map->layout->header_size);
     Laik_Mapping tmp = *map;
     tmp.start = tmp.base = (char*)sd->cpybuf.ptr + map->layout->header_size;
@@ -372,6 +378,8 @@ int shmem_sendPack(Laik_Mapping* map, Laik_Range* range, int receiver,  Laik_Ins
     Laik_Layout* ll = data->layout_factory(1, range);
     tmp.layout = ll;
     tmp.layoutSection = tmp.mapNo = 0;
+
+    // init copy buffer
     ll->init(&tmp, sd->cpybuf.ptr, 0);
     
     struct commHeader* shmp = sd->shmp;
@@ -403,6 +411,8 @@ static void shmem_tmpMap(Laik_Mapping* tmp, Laik_Range* range, char* ptr, Laik_M
     //init layout
     rangeS = &shmp->range;
     rangeS->space = range->space;
+
+    //obtain adapter
     tmp->layout = laik_layout_get(range->space->inst->layouts, rangeS, lh);
     tmp->start = tmp->base = ptr + lh->size;
     tmp->data = map->data;
@@ -421,6 +431,7 @@ int shmem_recvMap(Laik_Mapping* map, Laik_Range* range, int sender, Laik_Inst_Da
     
     Laik_Mapping tmp;
 
+    // create temporary mapping
     shmem_tmpMap(&tmp, range, ptr, map, shmp);
     laik_data_copy(range, &tmp, map);
 
@@ -559,9 +570,6 @@ int shmem_update_comm(Laik_Shmem_Comm* sg, Laik_Group* g, Laik_Inst_Data* idata,
 
             if(tmpColours[colour] == -1)
                 tmpColours[colour] = newColour++;
-
-            SEND_INTS(&tmpColours[colour], 1, i, idata, g);
-
             
             // get division and new rank
             sg->locations[i] = tmpColours[colour];
@@ -572,9 +580,9 @@ int shmem_update_comm(Laik_Shmem_Comm* sg, Laik_Group* g, Laik_Inst_Data* idata,
             if(groupSizes[sg->locations[i]] == sd->ranksPerIslands) 
                 tmpColours[colour] = newColour++;
             
+            // assign rank
             sg->secondaryIds[i] = new_rank;
 
-            SEND_INTS(&new_rank, 1, i, idata, g);
             
         }
 
@@ -600,10 +608,6 @@ int shmem_update_comm(Laik_Shmem_Comm* sg, Laik_Group* g, Laik_Inst_Data* idata,
     {
         SEND_INTS(&sg->location, 1, 0, idata, g);
 
-        RECV_INTS(&sg->location, 1, 0, idata, g);
-
-        RECV_INTS(&sg->myid, 1, 0, idata, g);
-
         if (created && shmctl(shmid, IPC_RMID, 0) == -1)
             return SHMEM_SHMCTL_FAILED;
 
@@ -616,6 +620,10 @@ int shmem_update_comm(Laik_Shmem_Comm* sg, Laik_Group* g, Laik_Inst_Data* idata,
 
         RECV_INTS(&sg->numIslands, 1, 0, idata, g);
     }
+
+    // calculate location and id
+    sg->myid = sg->secondaryIds[rank];
+    sg->location = sg->locations[rank];
 
 
     sg->primaryRanks = malloc(sg->size * sizeof(int));
@@ -632,6 +640,7 @@ int shmem_update_comm(Laik_Shmem_Comm* sg, Laik_Group* g, Laik_Inst_Data* idata,
 
     sg->libLocations = calloc(g->size, sizeof(unsigned char));
 
+    // exchange headershmids and library ranks
     for(int i = 0; i < sg->size; ++i)
     {
         if(i != sg->myid)
@@ -659,6 +668,7 @@ int shmem_update_comm(Laik_Shmem_Comm* sg, Laik_Group* g, Laik_Inst_Data* idata,
 
     sg->primaryRanks[sg->myid] = rank; 
 
+    // init barrier in case the zero copy scheme was chosen
     if(sd->copyScheme == 0)
     {
         if(sg->myid == 0)
@@ -824,6 +834,7 @@ bool onSameIsland(Laik_ActionSeq* as, Laik_Shmem_Comm* sg, int inputgroup, int o
 
     if(!onlyOneLeft) return false;
 
+    // actually not needed
     int rankI = laik_aseq_taskInGroup(as, inputgroup, 0,  chain_idx);
     int rankO = laik_aseq_taskInGroup(as, outputgroup, 0, chain_idx);
 
