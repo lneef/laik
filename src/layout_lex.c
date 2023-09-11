@@ -500,6 +500,7 @@ void laik_layout_init_lex(Laik_Mapping* m, char* header, int n)
         return;
     }
 
+    // initialize new mapping
     Lex_Memory_Header* hd = (Lex_Memory_Header*) header;
     hd->count = lold->count;
     memcpy(hd->stride, lold->stride, 3 * sizeof(uint64_t));

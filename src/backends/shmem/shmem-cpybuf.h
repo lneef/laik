@@ -24,13 +24,18 @@ struct cpyBuf{
     size_t size;
 };
 
+// obtain copy buffer
 struct cpyBuf* shmem_cpybuf_obtain();
 
+// obtain copy buffer with the given size
 void shmem_cpybuf_alloc(struct cpyBuf*, size_t size);
 
+// delete copy buffer
 void shmem_cpybuf_delete(struct cpyBuf*);
 
+// request certain size (no allocation)
 void shmem_cpybuf_request(struct cpyBuf*, size_t size);
 
+// allocate requested size
 void shmem_cpybuf_alloc_requested(struct cpyBuf*);
 #endif

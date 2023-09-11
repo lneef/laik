@@ -89,7 +89,7 @@ static int recvIntegersShmem(int* buffer, int count, int sender, Laik_Inst_Data*
     Laik_Shmem_Comm* sg = g->backend_data[idata->index];
     return RECV_INTS(buffer, count, sg->primaryRanks[sender], idata, g);
 }
-// Secondary backend functionality
+
 int laik_shmem_secondary_init(Laik_Instance* inst, Laik_Group* world, int* primarySize, int* rank)
 {  
     inst->num_backends++;
@@ -263,6 +263,7 @@ void laik_shmem_secondary_prepare(Laik_Inst_Data* idata, Laik_ActionSeq *as)
     {
         if(a->chain_idx != idata->index - 1) continue;
 
+        // flagging
         switch (a->type) {
             case LAIK_AT_MapPackAndSend:
             {
@@ -299,6 +300,8 @@ void laik_shmem_secondary_prepare(Laik_Inst_Data* idata, Laik_ActionSeq *as)
     bool ret = false;
     unsigned int maxround = 0;
     a = as->action;
+
+    //replacement
     for (unsigned int i = 0; i < as->actionCount; i++, a = nextAction(a))
     {
         ret = false;

@@ -408,6 +408,8 @@ Laik_MappingList* prepareMaps(Laik_Data* d, Laik_Partitioning* p)
             laik_log(1, "  using provided memory (%lld bytes at %p with layout %s)",
                      (unsigned long long int) d->map0_size, d->map0_base,
                      layout->describe(m->layout));
+
+            // user provided memory is initialized directly
             m->layout->init(m, NULL, m->layoutSection);
         }
     }
@@ -444,12 +446,12 @@ uint64_t freeMap(Laik_Mapping* m, Laik_Data* d, Laik_SwitchStat* ss)
     uint64_t freed = 0;
     //m->layout->free(m, m->layoutSection);
     if (m->allocator) {
+
+        // if allocator is not NULL the header is in the actual memory segment
         m->allocator->free(m->data, m->header);
         laik_switchstat_free(ss, m->capacity);
         freed = m->capacity;
         
-        //free header(points to begin of section)
-        //(m->allocator->free)(d, m->header);
     }else if(m->header){
         //user provided memory
         free(m->header);

@@ -281,22 +281,31 @@ struct _TaskGroupAS
     int* tasks;
 };
 
+// check if taks is in group
 bool laik_aseq_isInGroup(Laik_ActionSeq* as, int subgroup, int task, int chain_idx);
 
+// obtain task at index <i>
 int laik_aseq_taskInGroup(Laik_ActionSeq* as, int subgroup, int i, int chain_idx);
 
+// add new group of secondary Ids behind the section of the upper layer
 void laik_aseq_addSecondaryGroup(Laik_ActionSeq* as, int subgroup, int* ranks, int rankNum, int chain_idx);
 
+// update whole section
 void laik_aseq_updateGroup(Laik_ActionSeq* as, int subgroup, int* ranks, int rankNum, int chain_idx);
 
+// update single task
 void laik_aseq_updateTask(Laik_ActionSeq* as, int subgroup, int i, int task, int chain_idx);
 
+// adjust number of task in the current section
 void laik_aseq_updateGroupCount(Laik_ActionSeq* as, int subgroup, int count, int chain_idx);
 
+// get number of tasks in the current section
 int laik_aseq_groupCount(Laik_ActionSeq* as, int subgroup, int chain_idx);
 
+// delete object of type TaskGroupAS
 void laik_aseq_removefromAS(Laik_ActionSeq* as);
 
+// check if reduction can be finished in the current layer
 bool laik_aseq_finishRed(Laik_ActionSeq* as, int inputGroup, int outputGroup, int chain_idx);
 
 // helpers for building new action sequences. New actions are first

@@ -17,7 +17,6 @@
  */
 
 
-#include "laik/core.h"
 #define _GNU_SOURCE
 #include <sched.h>
 
@@ -593,8 +592,6 @@ int shmem_update_comm(Laik_Shmem_Comm* sg, Laik_Group* g, Laik_Inst_Data* idata,
             if(tmpColours[colour] == -1)
                 tmpColours[colour] = newColour++;
 
-            SEND_INTS(&tmpColours[colour], 1, i, idata, g);
-
             
             // get division and new rank
             sg->locations[i] = tmpColours[colour];
@@ -606,8 +603,6 @@ int shmem_update_comm(Laik_Shmem_Comm* sg, Laik_Group* g, Laik_Inst_Data* idata,
                 tmpColours[colour] = newColour++;
             
             sg->secondaryIds[i] = new_rank;
-
-            SEND_INTS(&new_rank, 1, i, idata, g);
             
         }
 
@@ -633,10 +628,6 @@ int shmem_update_comm(Laik_Shmem_Comm* sg, Laik_Group* g, Laik_Inst_Data* idata,
     {
         SEND_INTS(&sg->location, 1, 0, idata, g);
 
-        RECV_INTS(&sg->location, 1, 0, idata, g);
-
-        RECV_INTS(&sg->myid, 1, 0, idata, g);
-
         if (created && shmctl(shmid, IPC_RMID, 0) == -1)
             return SHMEM_SHMCTL_FAILED;
 
@@ -651,6 +642,9 @@ int shmem_update_comm(Laik_Shmem_Comm* sg, Laik_Group* g, Laik_Inst_Data* idata,
     }
     sg->primaryRanks = malloc(sg->size * sizeof(int));
 
+    sg->location = sg->locations[rank];
+    sg->myid = sg->secondaryIds[rank];
+    
     int ii = 0;
     for(int i = 0; i < size && ii < sg->size; ++i)
     {
@@ -805,6 +799,7 @@ bool onSameIsland(Laik_ActionSeq* as, Laik_Shmem_Comm* sg, int inputgroup, int o
 
     if(!onlyOneLeft) return false;
 
+    // actually not needed
     int rankI = laik_aseq_taskInGroup(as, inputgroup, 0,  chain_idx);
     int rankO = laik_aseq_taskInGroup(as, outputgroup, 0, chain_idx);
 

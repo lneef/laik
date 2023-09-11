@@ -92,20 +92,28 @@ struct _Laik_Backend {
   Laik_Allocator* (*allocator)();
 };
 
+// delegate action sequence to next backend
 void laik_next_prepare(Laik_Inst_Data* idata, Laik_ActionSeq* as);
 
+// cleanup temporary data
 void laik_next_cleanup(Laik_Inst_Data* idata, Laik_ActionSeq* as);
 
+// update current group
 void laik_next_updateGroup(Laik_Inst_Data* idata, Laik_Group* g, int rank, int size);
 
+// action is executed by lower
 Laik_Action* laik_next_exec(Laik_Inst_Data* idata, Laik_ActionSeq* as);
 
+// action is backend specific (must be logged by a lower layer)
 bool laik_next_log(Laik_Inst_Data* idata, Laik_ActionSeq* as, Laik_Action* a);
 
+// finalize next backend
 void laik_next_finalize(Laik_Inst_Data* idata, Laik_Instance* inst);
 
+// send macro for secondary backend initialization
 #define SEND_INTS(buffer, num, receiver, inst_data, g) (inst_data->prev->send(buffer, num, receiver, inst_data->prev, g))
 
+// receive macro for secondary backend initialization
 #define RECV_INTS(buffer, num, sender, inst_data, g) (inst_data->prev->recv(buffer, num, sender, inst_data->prev, g))
 
 #endif // LAIK_BACKEND_H

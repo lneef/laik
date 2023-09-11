@@ -28,14 +28,16 @@ struct shmHeader
 #define HEADER_SIZE (sizeof(struct shmHeader))
 #define HEADER_PAD 64
 
+// free shared memory segment corresponding to pointer
 void shmem_free(void* ptr);
 
+// release all open segments
 void deleteAllocatedSegments();
 
+// allocate shared memory segment with the given size
 void* shmem_alloc(size_t size, int* shimdPtr);
 
-void cleanup(void);
-
+// get shmid and offset for given ptr
 int get_shmid(void *ptr, int *shmid, int *offset);
 
 #endif
