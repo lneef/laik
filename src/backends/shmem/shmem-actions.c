@@ -163,7 +163,7 @@ void laik_shmem_exec_GroupReduce(Laik_Action * a, Laik_ActionSeq* as, Laik_Trans
 
     if(sg->myid == ba->primary)
     {    
-        memcpy(ba->buf, ba->fromBuf, ba->count * data->elemsize);
+     
         int count = laik_aseq_groupCount(as, ba->subgroup, chain_idx);
         for(int i = 1; i < count; ++i)
         {   
