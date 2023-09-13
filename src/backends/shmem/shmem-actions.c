@@ -1,4 +1,21 @@
-
+/*
+ * This file is part of the LAIK library.
+ * Copyright (c) 2022 Robert Hubinger <robert.hubinger@tum.de>
+ * Copyright (c) 2023 Lukas Neef <lukas.neef@tum.de>
+ *
+ * LAIK is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation, version 3 or later.
+ *
+ * LAIK is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
 #include "shmem-actions.h"
 #include "backends/shmem/shmem-manager.h"
 #include "laik/action.h"
@@ -158,9 +175,6 @@ void laik_shmem_exec_GroupReduce(Laik_Action * a, Laik_ActionSeq* as, Laik_Trans
 
     if(sg->myid == ba->primary)
     {   
-        // memcpy frombBuf into temporary buffer 
-        memcpy(ba->buf, ba->fromBuf, ba->count * data->elemsize);
-
         // collect input values
         int count = laik_aseq_groupCount(as, ba->subgroup, chain_idx);
         for(int i = 1; i < count; ++i)

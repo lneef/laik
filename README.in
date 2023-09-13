@@ -92,6 +92,11 @@ to use performance counters for profiling. C++ is used in some examples.
 
 * Josef Weidendorfer, Dai Yang, and Carsten Trinitis. LAIK: A Library for Fault Tolerant Distribution of Global Data for Parallel Applications. In Proceedings of the 27th PARS Workshop (PARS 2017). Hagen, DE, 2017. [PDF](https://mediatum.ub.tum.de/1375185)
 
+# Shared Memory
+
+* see experiments.sh for sample executions using the shared memory backend
+* when the program is terminated with Strg + C, this might lead to a Segmentation Fault or the shared memory segments are not released
+
 
 # License
 

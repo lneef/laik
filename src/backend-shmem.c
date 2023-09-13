@@ -1,6 +1,7 @@
 /*
  * This file is part of the LAIK library.
  * Copyright (c) 2022 Robert Hubinger <robert.hubinger@tum.de>
+ * Copyright (c) 2023 Lukas Neef <lukas.neef@tum.de>
  *
  * LAIK is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -23,9 +24,6 @@
 #include "backends/shmem/shmem.h"
 #include "backends/shmem/shmem-allocator.h"
 #include "backends/shmem/shmem-actions.h"
-#include "laik/action-internal.h"
-#include "laik/action.h"
-#include "laik/space.h"
 
 #include <assert.h>
 #include <bits/time.h>
@@ -351,6 +349,7 @@ void laik_shmem_secondary_prepare(Laik_Inst_Data* idata, Laik_ActionSeq *as)
         {
         case LAIK_AT_GroupReduce:
         {   
+            // not necessary anymore
             Laik_BackendAction* ba = (Laik_BackendAction*) a;
             shmem_replace_groupReduce(as, ba, sg, chain_idx);
             ret = true;

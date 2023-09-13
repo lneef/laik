@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # to test other copy schemes, you need to adjust LAIK_SHMEM_COPY_SCHEME, for huge pages use LAIK_SHMEM_HUGE_PAGES=1 (1-copy, 2-copy)
-# export OMPI_MCA_btl_vader_single_copy_mechanism=none //diable single copy
+# use export OMPI_MCA_btl_vader_single_copy_mechanism=none to disable single copy for OpenMPI
 
 LAIK_BACKEND=mpi LAIK_SECONDARIES=SHMEM LAIK_SHMEM_COPY_SCHEME=0 mpirun --mca btl vader,self --map-by c re -np 8 ./jac2d 10000 500
 
