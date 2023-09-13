@@ -2091,7 +2091,7 @@ void send_data(int n, int dims, Laik_Index* idx, int toLID, void* p, int s)
             laik_log_flush("");
     }
 
-    send_cmd((InstData*)instance->inst_data, toLID, str);
+    send_cmd((InstData*)instance->inst_data->backend_data, toLID, str);
 }
 
 // send
@@ -2112,7 +2112,7 @@ void send_data_bin_flush(int toLID)
     sbuf[0] = 'B';
     sbuf[1] = bytes & 255;
     sbuf[2] = bytes >> 8;
-    send_bin((InstData*)instance->inst_data, toLID, sbuf, sbuf_used);
+    send_bin((InstData*)instance->inst_data->backend_data, toLID, sbuf, sbuf_used);
     sbuf_used = 3; // reserve space for header
     sbuf_toLID = -1;
 }
@@ -2152,7 +2152,7 @@ void send_range(Laik_Mapping* fromMap, Laik_Range* range, int toLID)
     int dims = range->space->dims;
     assert(fromMap->start != 0); // must be backed by memory
 
-    InstData* d = (InstData*)instance->inst_data;
+    InstData* d = (InstData*)instance->inst_data->backend_data;
     Peer* p = &(d->peer[toLID]);
     if (p->scount == 0) {
         // we need to wait for right to send data
@@ -2191,7 +2191,7 @@ void recv_range(Laik_Range* range, int fromLID, Laik_Mapping* toMap, Laik_Reduct
 {
     assert(toMap->start != 0); // must be backed by memory
     // check no data still registered to be received from <fromID>
-    InstData* d = (InstData*)instance->inst_data;
+    InstData* d = (InstData*)instance->inst_data->backend_data;
     Peer* p = &(d->peer[fromLID]);
     assert(p->rcount == 0);
 

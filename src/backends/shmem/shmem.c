@@ -127,6 +127,8 @@ static void shmem_parse_affinity_mask(Laik_Shmem_Data* sd)
 
     int i = 0;
     int set = 0;
+
+    // parse mask
     while(override[i])
     {
         CPU_ZERO_S(size, mask);
@@ -227,7 +229,7 @@ static int shmem_split_location(int rank, int size, Laik_Inst_Data* idata, int s
             sg->location = g->myid;
         }
         
-        // register for barrier
+        // barrier to ensure all process have reached this point
         shmem_init_sync(rank, size, idata, g);
     }
 
@@ -427,6 +429,8 @@ static inline int shmem_cpyMap(Laik_Mapping* map, Laik_Range* range, struct comm
     tmp.layout = laik_layout_get(range->space->inst->layouts, rangeS, lh);
     tmp.start = tmp.base = ptr + lh->size;
     tmp.data = map->data;
+
+    // perform copy
     laik_data_copy(range, &tmp, map);
 
     shmp->receiver = -1;
