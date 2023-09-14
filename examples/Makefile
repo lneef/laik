@@ -1,5 +1,5 @@
 # default settings
-OPT=-g
+OPT=-O3 -g
 
 # settings from 'configure', may overwrite defaults
 -include ../Makefile.config
