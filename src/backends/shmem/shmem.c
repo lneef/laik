@@ -451,6 +451,7 @@ int shmem_zeroCopySync(Laik_Inst_Data* idata, Laik_Group* g, Laik_TransitionCont
     Laik_Transition* t = tc->transition;
     Laik_Data* d = tc->data;
 
+    // TODO: make it independet of transition object (should be immutable)
     if (t->localCount > 0)
         copyMaps(t, tc->toList, tc->fromList, d->stat);
     t->localCount = 0;
