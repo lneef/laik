@@ -4,6 +4,7 @@
 # use export OMPI_MCA_btl_vader_single_copy_mechanism=none to disable single copy for OpenMPI
 # for OpenMP -fopenmp has to be added to the Makefile
 # to use the blockwise partitioner for jac2d you need to adjust the respective source file
+# for OpenMP OMP_NUM_THREADS=8 OMP_PROC_BIND=spread OMP_PLACES=cores OMP_WAIT_POLICY=ACTIVE LAIK_BACKEND=mpi mpirun -np 1 --mca btl vader,self --map-by socket:PE=16 --bind-to core ./jac2d 10000 500
 
 LAIK_BACKEND=mpi LAIK_SECONDARIES=SHMEM LAIK_SHMEM_COPY_SCHEME=0 mpirun --mca btl vader,self --map-by core -np 8 ./jac2d 10000 500
 
